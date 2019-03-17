@@ -298,12 +298,17 @@ def _dataset_concat(datasets, dim, data_vars, coords, compat, positions):
                 var = var.set_dims(common_dims, common_shape)
             yield var
 
+    # re-initialize result_vars to write in correct order
+    result_vars = OrderedDict()
+
     # stack up each variable to fill-out the dataset (in order)
     for k in datasets[0].variables:
         if k in concat_over:
             vars = ensure_common_dims([ds.variables[k] for ds in datasets])
             combined = concat_vars(vars, dim, positions)
             insert_result_variable(k, combined)
+        else:
+            insert_result_variable(k, datasets[0].variables[k])
 
     result = Dataset(result_vars, attrs=result_attrs)
     result = result.set_coords(result_coord_names)
