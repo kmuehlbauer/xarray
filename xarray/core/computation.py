@@ -4,6 +4,7 @@ Functions for applying functions that act on arrays to xarray's labeled data.
 import functools
 import itertools
 import operator
+import warnings
 from collections import Counter
 from typing import (
     TYPE_CHECKING,
@@ -547,8 +548,9 @@ def apply_variable_ufunc(
     dask="forbidden",
     vectorize=False,
     output_dtypes=None,
-    output_sizes=None,
+    # output_sizes=None,
     keep_attrs=False,
+    dask_kwargs=None,
 ):
     """Apply a ndarray level function over Variable and/or ndarray objects.
     """
@@ -582,6 +584,10 @@ def apply_variable_ufunc(
         elif dask == "parallelized":
             numpy_func = func
 
+            if dask_kwargs is None:
+                dask_kwargs = {}
+
+            #print(dask_kwargs)
             def func(*arrays):
                 import dask.array as da
 
@@ -590,8 +596,9 @@ def apply_variable_ufunc(
                     str(signature),
                     *arrays,
                     output_dtypes=output_dtypes,
-                    output_sizes=output_sizes,
+                    # output_sizes=output_sizes,
                     vectorize=vectorize,
+                    **dask_kwargs,
                 )
                 # keep until https://github.com/dask/dask/pull/6207 is available
                 if signature.num_outputs > 1:
@@ -610,7 +617,25 @@ def apply_variable_ufunc(
         if vectorize:
             func = _vectorize(func, signature, output_dtypes)
 
-    result_data = func(*input_data)
+    try:
+        result_data = func(*input_data)
+    except ValueError as e:
+        # catch chunk-mismatch and try again with 'allow_rechunk'
+        if "with different chunksize present" in str(e):
+            allow_rechunk = dask_kwargs.setdefault('allow_rechunk', False)
+            print(dask_kwargs)
+            print(allow_rechunk)
+            # immediately raise if user requested allow_rechunk=False
+            if not allow_rechunk:
+                raise
+            # otherwise issue warning and try again with allow_rechunk=True
+            import warnings
+            warnings.warn(str(e) + " This will throw an error in the future.")
+            dask_kwargs.update(allow_rechunk=True)
+            result_data = func(*input_data)
+        else:
+            raise
+
     if signature.num_outputs == 1:
         result_data = (result_data,)
     elif (
@@ -677,7 +702,6 @@ def apply_array_ufunc(func, *args, dask="forbidden"):
             pass
         else:
             raise ValueError(f"unknown setting for dask array handling: {dask}")
-    # maybe vectorizing??
     return func(*args)
 
 
@@ -705,7 +729,9 @@ def apply_ufunc(
     dask: str = "forbidden",
     output_dtypes: Sequence = None,
     output_sizes: Mapping[Any, int] = None,
-    # meta: Any = None,
+    meta: Any = None,
+    dask_kwargs: Mapping = None,
+
 ) -> Any:
     """Apply a vectorized function for unlabeled arrays on xarray objects.
 
@@ -792,20 +818,28 @@ def apply_ufunc(
         dask arrays:
 
         - 'forbidden' (default): raise an error if a dask array is encountered.
-        - 'allowed': pass dask arrays directly on to ``func``. Prefer this option if ``func`` natively supports dask arrays.
+        - 'allowed': pass dask arrays directly on to ``func``. Prefer this option if
+          ``func`` natively supports dask arrays.
         - 'parallelized': automatically parallelize ``func`` if any of the
           inputs are a dask array. If used, the ``output_dtypes`` argument must
           also be provided. Multiple output arguments are supported.
-          Only use this option if ``func`` does not support dask arrays (e.g. converts them to numpy arrays).
+          Only use this option if ``func`` does not support dask arrays
+          (e.g. converts them to numpy arrays).
+    dask_kwargs : dict, optional
+        Optional keyword arguments passed to ``dask.array.apply_gufunc`` if
+        dask='parallelized'. Possible keywords are `output_sizes` and `allow_rechunk`.
     output_dtypes : list of dtypes, optional
-        Optional list of output dtypes. Only used if dask='parallelized'.
+        Optional list of output dtypes. Only used if dask='parallelized' or
+        vectorize=True.
     output_sizes : dict, optional
         Optional mapping from dimension names to sizes for outputs. Only used
         if dask='parallelized' and new dimensions (not found on inputs) appear
-        on outputs.
+        on outputs. ``output_sizes`` should be given in the ``dask_kwargs`` parameter.
+        It is no longer used as direct parameter and will be removed in a future
+        version.
     meta : optional
-        Size-0 object representing the type of array wrapped by dask array. Passed on to
-        ``dask.array.blockwise``.
+        ``meta`` is no longer necessary and has no effect. It will be removed in a
+        future version.
 
     Returns
     -------
@@ -934,6 +968,17 @@ def apply_ufunc(
             "core dimension in the function signature"
         )
 
+    if meta is not None:
+        warnings.warn("``meta`` is no longer necessary and has no effect. "
+                      "It will be removed in a future version.")
+    if output_sizes is not None:
+        warnings.warn("``output_sizes`` should be given in the ``dask_kwargs`` "
+                      "parameter instead. It will be removed as direct parameter "
+                      "in a future version.")
+        if dask_kwargs is None:
+            dask_kwargs = {}
+        dask_kwargs.setdefault('output_sizes', output_sizes)
+
     if kwargs:
         func = functools.partial(func, **kwargs)
 
@@ -946,7 +991,8 @@ def apply_ufunc(
         dask=dask,
         vectorize=vectorize,
         output_dtypes=output_dtypes,
-        output_sizes=output_sizes,
+        # output_sizes=output_sizes,
+        dask_kwargs=dask_kwargs,
     )
 
     # feed groupby-apply_ufunc through apply_groupby_func
@@ -963,6 +1009,7 @@ def apply_ufunc(
             keep_attrs=keep_attrs,
             dask=dask,
             vectorize=vectorize,
+            dask_kwargs=dask_kwargs,
         )
         return apply_groupby_func(this_apply, *args)
     # feed datasets apply_variable_ufunc through apply_dataset_vfunc

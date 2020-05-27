@@ -669,13 +669,13 @@ def test_apply_dask_parallelized_two_args():
     data_array = xr.DataArray(array, dims=("x", "y"))
     data_array.name = None
 
-    def parallel_add(x, y):
+    def parallel_add(x, y, allow_rechunk=None):
         return apply_ufunc(
-            operator.add, x, y, dask="parallelized", output_dtypes=[np.int64],
+            operator.add, x, y, dask="parallelized", output_dtypes=[np.int64], dask_kwargs=dict(allow_rechunk=allow_rechunk)
         )
 
-    def check(x, y):
-        actual = parallel_add(x, y)
+    def check(x, y, allow_rechunk=None):
+        actual = parallel_add(x, y, allow_rechunk=allow_rechunk)
         assert isinstance(actual.data, da.Array)
         assert actual.data.chunks == array.chunks
         assert_identical(data_array, actual)
@@ -686,11 +686,9 @@ def test_apply_dask_parallelized_two_args():
     check(data_array, 0 * data_array)
     check(data_array, 0 * data_array[0])
     check(data_array[:, 0], 0 * data_array[0])
-    # todo: this raises ValueError since chunks do not match inside apply_gufunc due to
-    #  computing, could be fixed by setting `allow_rechunk=True` in the call to
-    #  apply_gufunc (or rechunking before feeding to apply_ufunc)
-    with raises_regex(ValueError, "with different chunksize present"):
+    with pytest.warns(UserWarning, match='This will throw an error'):
         check(data_array, 0 * data_array.compute())
+    check(data_array, 0 * data_array.compute(), allow_rechunk=True)
 
 
 @requires_dask
