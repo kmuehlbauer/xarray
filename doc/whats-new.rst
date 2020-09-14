@@ -86,6 +86,7 @@ Bug fixes
   By `Jens Svensmark <https://github.com/jenssss>`_
 - Fix incorrect legend labels for :py:meth:`Dataset.plot.scatter` (:issue:`4126`).
   By `Peter Hausamann <https://github.com/phausamann>`_.
+- Preserve dimension, coordinate and variable order during :py:func:`xarray.concat` (:issue:`2811`, :issue:`4072`, :pull:`4419`). By `Kai Mühlbauer <https://github.com/kmuehlbauer>`_.
 
 Documentation
 ~~~~~~~~~~~~~
