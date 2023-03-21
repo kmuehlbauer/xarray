@@ -400,7 +400,7 @@ def decode_cf_variable(
     encoding.setdefault("dtype", original_dtype)
 
     if "dtype" in attributes and attributes["dtype"] == "bool":
-        del attributes["dtype"]
+        encoding["dtype"] = attributes.pop("dtype")
         data = BoolTypeArray(data)
 
     if not is_duck_dask_array(data):
