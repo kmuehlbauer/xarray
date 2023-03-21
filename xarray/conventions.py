@@ -389,6 +389,15 @@ def decode_cf_variable(
     if decode_times:
         var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
 
+    # transform numpy object-dtype strings to numpy unicode strings
+    if (
+        "dtype" in var.encoding
+        and var.encoding["dtype"] == str
+        and original_dtype == object
+    ):
+        original_dtype = var.encoding["dtype"]
+        var = var.astype(var.encoding["dtype"])
+
     dimensions, data, attributes, encoding = variables.unpack_for_decoding(var)
     # TODO(shoyer): convert everything below to use coders
 

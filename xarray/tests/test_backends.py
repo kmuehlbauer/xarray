@@ -1368,6 +1368,7 @@ class NetCDF4Base(NetCDFBase):
             with self.roundtrip(original, save_kwargs=kwargs) as actual:
                 assert actual["x"].encoding["dtype"] is str
                 assert_identical(actual, expected)
+                assert actual["x"].dtype == "<U3"
 
     def test_roundtrip_string_with_fill_value_vlen(self) -> None:
         values = np.array(["ab", "cdef", np.nan], dtype=object)
