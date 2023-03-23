@@ -351,12 +351,12 @@ class H5netcdfBackendEntrypoint(BackendEntrypoint):
     selected as the default if the "netcdf4" engine is not available.
 
     Additionally it can open valid HDF5 files, see
-    https://h5netcdf.org/#invalid-netcdf-files for more info.
+    :std:ref:`h5netcdf:invalid netcdf` for more info.
     It will not be detected as valid backend for such files, so make
     sure to specify ``engine="h5netcdf"`` in ``open_dataset``.
 
     For more information about the underlying library, visit:
-    https://h5netcdf.org
+    :std:doc:`h5netcdf:index`
 
     See Also
     --------

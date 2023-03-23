@@ -42,6 +42,9 @@ Bug fixes
   By `Thomas Coleman <https://github.com/ColemanTom>`_.
 - Proper plotting when passing :py:class:`~matplotlib.colors.BoundaryNorm` type argument in :py:meth:`DataArray.plot`. (:issue:`4061`, :issue:`7014`,:pull:`7553`)
   By `Jelmer Veenstra <https://github.com/veenstrajelmer>`_.
+- Preserve dtypes (bool, vlen string) within encoding (:pull:`7654`).
+  By `Kai Mühlbauer <https://github.com/kmuehlbauer>`_
+
 
 Documentation
 ~~~~~~~~~~~~~
@@ -6189,7 +6192,7 @@ Enhancements
   The default value for the ``display_width`` option is 80.
 
 .. _h5py: http://www.h5py.org/
-.. _h5netcdf: https://github.com/shoyer/h5netcdf
+.. _h5netcdf: https://github.com/h5netcdf/h5netcdf
 
 Deprecations
 ~~~~~~~~~~~~

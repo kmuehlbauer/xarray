@@ -37,16 +37,16 @@ netCDF are based on the even more widely used HDF5 file-format.
 
 __ https://www.unidata.ucar.edu/software/netcdf/
 
+Reading and writing netCDF files with xarray requires :std:doc:`scipy <scipy:index>`, `netCDF4-Python`__ or :std:doc:`h5netcdf <h5netcdf:index>` libraries to be installed (the two latter are able
+to read/write netCDF V4 files and use the compression options described below).
+
 .. tip::
 
     If you aren't familiar with this data format, the `netCDF FAQ`_ is a good
-    place to start.
+    place to start. A comprehensive documentation is available in the Unidata NetCDF Users Guide's `The netCDF File Format`_ section.
 
 .. _netCDF FAQ: https://www.unidata.ucar.edu/software/netcdf/docs/faq.html#What-Is-netCDF
-
-Reading and writing netCDF files with xarray requires scipy or the
-`netCDF4-Python`__ library to be installed (the latter is required to
-read/write netCDF V4 files and use the compression options described below).
+.. _The netCDF File Format: https://docs.unidata.ucar.edu/nug/current/netcdf_introduction.html#netcdf_format
 
 __ https://github.com/Unidata/netcdf4-python
 
@@ -69,6 +69,15 @@ We can save a Dataset to disk using the
 By default, the file is saved as netCDF4 (assuming netCDF4-Python is
 installed). You can control the format and engine used to write the file with
 the ``format`` and ``engine`` arguments.
+
+.. warning::
+
+  There are several `Limitations of NetCDF`_ which can have influence on `Large File Support`_, `Data Types`_, `Dealing with strings`_ or the like depending on the requested ``format`` (see :py:meth:`Dataset.to_netcdf` for details). In general, using ``netcdf4``/``h5netcdf`` engine with ``format="NETCDF4"`` (default) is recommended.
+
+.. _Limitations of NetCDF: https://docs.unidata.ucar.edu/nug/current/netcdf_introduction.html#limitations
+.. _Large File Support: https://docs.unidata.ucar.edu/nug/current/file_structure_and_performance.html#large_file_support
+.. _Data Types: https://docs.unidata.ucar.edu/nug/current/md_types.html
+.. _Dealing with strings: https://unidata.github.io/netcdf4-python/#dealing-with-strings
 
 .. tip::
 
@@ -540,8 +549,7 @@ Invalid netCDF files
 ~~~~~~~~~~~~~~~~~~~~
 
 The library ``h5netcdf`` allows writing some dtypes (booleans, complex, ...) that aren't
-allowed in netCDF4 (see
-`h5netcdf documentation <https://github.com/shoyer/h5netcdf#invalid-netcdf-files>`_).
+allowed in netCDF4 (see :std:ref:`h5netcdf:invalid netcdf`).
 This feature is available through :py:meth:`DataArray.to_netcdf` and
 :py:meth:`Dataset.to_netcdf` when used with ``engine="h5netcdf"``
 and currently raises a warning unless ``invalid_netcdf=True`` is set:
@@ -923,6 +931,7 @@ installed, xarray can convert a ``DataArray`` into a ``Cube`` using
 :py:meth:`DataArray.to_iris`:
 
 .. ipython:: python
+    :okexcept:
 
     da = xr.DataArray(
         np.random.rand(4, 5),
@@ -937,6 +946,7 @@ Conversely, we can create a new ``DataArray`` object from a ``Cube`` using
 :py:meth:`DataArray.from_iris`:
 
 .. ipython:: python
+    :okexcept:
 
     da_cube = xr.DataArray.from_iris(cube)
     da_cube

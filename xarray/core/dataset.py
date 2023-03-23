@@ -1892,7 +1892,7 @@ class Dataset(
         invalid_netcdf: bool, default: False
             Only valid along with ``engine="h5netcdf"``. If True, allow writing
             hdf5 files which are invalid netcdf as described in
-            https://github.com/h5netcdf/h5netcdf.
+            :std:ref:`h5netcdf:invalid netcdf`.
 
         Returns
         -------

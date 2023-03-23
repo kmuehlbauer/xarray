@@ -521,7 +521,7 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
     as default for these files.
 
     Additionally it can open valid HDF5 files, see
-    https://h5netcdf.org/#invalid-netcdf-files for more info.
+    :std:ref:`h5netcdf:invalid netcdf` for more info.
     It will not be detected as valid backend for such files, so make
     sure to specify ``engine="netcdf4"`` in ``open_dataset``.
 
