@@ -298,7 +298,7 @@ def encode_cf_variable(
     # TODO(shoyer): convert all of these to use coders, too:
     var = maybe_encode_nonstring_dtype(var, name=name)
     var = maybe_default_fill_value(var)
-    var = maybe_encode_bools(var)
+    var = variables.BooleanCoder().encode(var, name=name)
     var = ensure_dtype_not_object(var, name=name)
 
     for attr_name in CF_RELATED_DATA:
@@ -389,28 +389,20 @@ def decode_cf_variable(
     if decode_times:
         var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
 
-    # transform numpy object-dtype strings to numpy unicode strings
-    if (
-        "dtype" in var.encoding
-        and var.encoding["dtype"] == str
-        and original_dtype == object
-    ):
-        original_dtype = var.encoding["dtype"]
-        var = var.astype(var.encoding["dtype"])
+    if var.dtype == object:
+        var = variables.ObjectStringCoder().decode(var)
+
+    if decode_endianness:
+        var = variables.EndianCoder().decode(var)
+        original_dtype = var.dtype
+
+    var = variables.BooleanCoder().decode(var)
 
     dimensions, data, attributes, encoding = variables.unpack_for_decoding(var)
     # TODO(shoyer): convert everything below to use coders
-
-    if decode_endianness and not data.dtype.isnative:
-        # do this last, so it's only done if we didn't already unmask/scale
-        data = NativeEndiannessArray(data)
-        original_dtype = data.dtype
+    #  (kmuehlbauer): Check if anything below here still need to be converted
 
     encoding.setdefault("dtype", original_dtype)
-
-    if "dtype" in attributes and attributes["dtype"] == "bool":
-        encoding["dtype"] = attributes.pop("dtype")
-        data = BoolTypeArray(data)
 
     if not is_duck_dask_array(data):
         data = indexing.LazilyIndexedArray(data)

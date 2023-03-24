@@ -1366,27 +1366,22 @@ class NetCDF4Base(NetCDFBase):
             expected = Dataset({"x": ["foo", "bar", "baz"]})
             kwargs = dict(encoding={"x": {"dtype": str}})
             with self.roundtrip(original, save_kwargs=kwargs) as actual:
-                assert actual["x"].encoding["dtype"] is str
+                assert actual["x"].encoding["dtype"] == "<U3"
                 assert_identical(actual, expected)
                 assert actual["x"].dtype == "<U3"
 
     def test_roundtrip_string_with_fill_value_vlen(self) -> None:
         values = np.array(["ab", "cdef", np.nan], dtype=object)
+        print("test-dtype:", values.dtype)
         expected = Dataset({"x": ("t", values)})
 
-        # netCDF4-based backends don't support an explicit fillvalue
-        # for variable length strings yet.
-        # https://github.com/Unidata/netcdf4-python/issues/730
-        # https://github.com/h5netcdf/h5netcdf/issues/37
         original = Dataset({"x": ("t", values, {}, {"_FillValue": "XXX"})})
-        with pytest.raises(NotImplementedError):
-            with self.roundtrip(original) as actual:
-                assert_identical(expected, actual)
+        with self.roundtrip(original) as actual:
+            assert_identical(expected, actual)
 
         original = Dataset({"x": ("t", values, {}, {"_FillValue": ""})})
-        with pytest.raises(NotImplementedError):
-            with self.roundtrip(original) as actual:
-                assert_identical(expected, actual)
+        with self.roundtrip(original) as actual:
+            assert_identical(expected, actual)
 
     def test_roundtrip_character_array(self) -> None:
         with create_tmp_file() as tmp_file:

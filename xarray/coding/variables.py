@@ -349,3 +349,116 @@ class UnsignedIntegerCoder(VariableCoder):
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
+
+
+class BoolTypeArray(indexing.ExplicitlyIndexedNDArrayMixin):
+    """Decode arrays on the fly from integer to boolean datatype
+
+    This is useful for decoding boolean arrays from integer typed netCDF
+    variables.
+
+    >>> x = np.array([1, 0, 1, 1, 0], dtype="i1")
+
+    >>> x.dtype
+    dtype('int8')
+
+    >>> BoolTypeArray(x).dtype
+    dtype('bool')
+
+    >>> indexer = indexing.BasicIndexer((slice(None),))
+    >>> BoolTypeArray(x)[indexer].dtype
+    dtype('bool')
+    """
+
+    __slots__ = ("array",)
+
+    def __init__(self, array):
+        self.array = indexing.as_indexable(array)
+
+    @property
+    def dtype(self):
+        return np.dtype("bool")
+
+    def __getitem__(self, key):
+        return np.asarray(self.array[key], dtype=self.dtype)
+
+
+class BooleanCoder(VariableCoder):
+    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        if (
+            (variable.dtype == bool)
+            and ("dtype" not in variable.encoding)
+            and ("dtype" not in variable.attrs)
+        ):
+            dims, data, attrs, encoding = unpack_for_encoding(variable)
+            attrs["dtype"] = "bool"
+            data = duck_array_ops.astype(data, dtype="i1", copy=True)
+
+            return Variable(dims, data, attrs, encoding, fastpath=True)
+        else:
+            return variable
+
+    def decode(self, variable: Variable, name: T_Name = None) -> Variable:
+        if variable.attrs.get("dtype", False) == "bool":
+            dims, data, attrs, encoding = unpack_for_decoding(variable)
+            encoding["dtype"] = attrs.pop("dtype")
+            data = BoolTypeArray(data)
+            return Variable(dims, data, attrs, encoding, fastpath=True)
+        else:
+            return variable
+
+
+class NativeEndiannessArray(indexing.ExplicitlyIndexedNDArrayMixin):
+    """Decode arrays on the fly from non-native to native endianness
+
+    This is useful for decoding arrays from netCDF3 files (which are all
+    big endian) into native endianness, so they can be used with Cython
+    functions, such as those found in bottleneck and pandas.
+
+    >>> x = np.arange(5, dtype=">i2")
+
+    >>> x.dtype
+    dtype('>i2')
+
+    >>> NativeEndiannessArray(x).dtype
+    dtype('int16')
+
+    >>> indexer = indexing.BasicIndexer((slice(None),))
+    >>> NativeEndiannessArray(x)[indexer].dtype
+    dtype('int16')
+    """
+
+    __slots__ = ("array",)
+
+    def __init__(self, array):
+        self.array = indexing.as_indexable(array)
+
+    @property
+    def dtype(self):
+        return np.dtype(self.array.dtype.kind + str(self.array.dtype.itemsize))
+
+    def __getitem__(self, key):
+        return np.asarray(self.array[key], dtype=self.dtype)
+
+
+class EndianCoder(VariableCoder):
+    def encode(self):
+        return NotImplementedError
+
+    def decode(self, variable: Variable, name: T_Name = None) -> Variable:
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
+        if not data.dtype.isnative:
+            data = NativeEndiannessArray(data)
+            return Variable(dims, data, attrs, encoding, fastpath=True)
+        else:
+            return variable
+
+
+class ObjectStringCoder(VariableCoder):
+    def encode(self):
+        return NotImplementedError
+
+    def decode(self, variable: Variable, name: T_Name = None) -> Variable:
+        if variable.encoding.get("dtype", False) == str:
+            variable = variable.astype(variable.encoding["dtype"])
+        return variable
