@@ -234,6 +234,7 @@ def ensure_dtype_not_object(var: Variable, name: T_Name = None) -> Variable:
 
         missing = pd.isnull(data)
         if missing.any():
+            print("encode object dtype")
             # nb. this will fail for dask.array data
             non_missing_values = data[~missing]
             inferred_dtype = _infer_dtype(non_missing_values, name)
@@ -299,6 +300,10 @@ def encode_cf_variable(
     var = maybe_encode_nonstring_dtype(var, name=name)
     var = maybe_default_fill_value(var)
     var = variables.BooleanCoder().encode(var, name=name)
+
+    print("VAR:", var)
+    print("ENC:", var.encoding)
+    print("ATTRS:", var.attrs)
     var = ensure_dtype_not_object(var, name=name)
 
     for attr_name in CF_RELATED_DATA:

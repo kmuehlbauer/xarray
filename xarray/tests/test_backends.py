@@ -497,6 +497,7 @@ class DatasetIOBase:
             try:
                 assert_identical(expected, actual)
             except AssertionError:
+                print("AssertionError")
                 # Most stores use '' for nans in strings, but some don't.
                 # First try the ideal case (where the store returns exactly)
                 # the original Dataset), then try a more realistic case.
@@ -1372,7 +1373,6 @@ class NetCDF4Base(NetCDFBase):
 
     def test_roundtrip_string_with_fill_value_vlen(self) -> None:
         values = np.array(["ab", "cdef", np.nan], dtype=object)
-        print("test-dtype:", values.dtype)
         expected = Dataset({"x": ("t", values)})
 
         original = Dataset({"x": ("t", values, {}, {"_FillValue": "XXX"})})

@@ -446,7 +446,7 @@ class EndianCoder(VariableCoder):
         return NotImplementedError
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
-        dims, data, attrs, encoding = unpack_for_encoding(variable)
+        dims, data, attrs, encoding = unpack_for_decoding(variable)
         if not data.dtype.isnative:
             data = NativeEndiannessArray(data)
             return Variable(dims, data, attrs, encoding, fastpath=True)
@@ -459,6 +459,13 @@ class ObjectStringCoder(VariableCoder):
         return NotImplementedError
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
-        if variable.encoding.get("dtype", False) == str:
+        print("decoding VLEN string")
+        print("DEC-VAR:", variable.dtype)
+        print("DEC-ENC:", variable.encoding)
+        print("DEC-ATTRS:", variable.attrs)
+        if (
+            variable.encoding.get("dtype", False) == str
+            and variable.encoding.get("_FillValue", None) is None
+        ):
             variable = variable.astype(variable.encoding["dtype"])
         return variable

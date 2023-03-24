@@ -35,8 +35,8 @@ dependencies:
   - sphinx-design
   - sphinx>=5.0
   - zarr>=2.10
-  - pip:
-      - sphinxext-rediraffe
-      - sphinxext-opengraph
+  #- pip:
+  - sphinxext-rediraffe
+  - sphinxext-opengraph
       # relative to this file. Needs to be editable to be accepted.
-      - -e ../..
+  #    - -e ../..
