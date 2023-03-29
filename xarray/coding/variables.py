@@ -207,7 +207,15 @@ class CFMaskCoder(VariableCoder):
                     stacklevel=3,
                 )
 
+            # print("raw_fill_values:", raw_fill_values)
+            # print("encoded_fill_values:", encoded_fill_values)
+            # print("data.dtype:", data.dtype)
+            # print("encoding:", encoding)
             dtype, decoded_fill_value = dtypes.maybe_promote(data.dtype)
+            # if dtype == "float32" and "add_offset" in attrs:
+            #    dtype = np.float64
+
+            # print("data.dtype, fv:", dtype, decoded_fill_value)
 
             if encoded_fill_values:
                 transform = partial(
@@ -262,34 +270,110 @@ class CFScaleOffsetCoder(VariableCoder):
         dims, data, attrs, encoding = unpack_for_encoding(variable)
 
         if "scale_factor" in encoding or "add_offset" in encoding:
-            dtype = _choose_float_dtype(data.dtype, "add_offset" in encoding)
+            scale_factor = pop_to(encoding, attrs, "scale_factor", name=name)
+            add_offset = pop_to(encoding, attrs, "add_offset", name=name)
+            maxsize = 4
+            if scale_factor and np.issubdtype(type(scale_factor), np.floating):
+                maxsize = max(maxsize, scale_factor.dtype.itemsize)
+            if add_offset and np.issubdtype(type(add_offset), np.floating):
+                maxsize = max(maxsize, add_offset.dtype.itemsize)
+            dtype = np.dtype(f"float{maxsize*8}")
             data = data.astype(dtype=dtype, copy=True)
-        if "add_offset" in encoding:
-            data -= pop_to(encoding, attrs, "add_offset", name=name)
-        if "scale_factor" in encoding:
-            data /= pop_to(encoding, attrs, "scale_factor", name=name)
+            print(add_offset)
+            if add_offset:
+                data -= add_offset
+            if scale_factor:
+                data /= scale_factor
+
+        dtype = np.dtype(encoding.get("dtype", data.dtype))
+        fv = encoding.get("_FillValue")
+        mv = encoding.get("missing_value")
+
+        if (
+            fv is not None
+            and mv is not None
+            and not duck_array_ops.allclose_or_equiv(fv, mv)
+        ):
+            raise ValueError(
+                f"Variable {name!r} has conflicting _FillValue ({fv}) and missing_value ({mv}). Cannot encode data."
+            )
+
+        if fv is not None:
+            # Ensure _FillValue is cast to same dtype as data's
+            encoding["_FillValue"] = dtype.type(fv)
+            fill_value = pop_to(encoding, attrs, "_FillValue", name=name)
+            if not pd.isnull(fill_value):
+                data = duck_array_ops.fillna(data, fill_value)
+
+        if mv is not None:
+            # Ensure missing_value is cast to same dtype as data's
+            encoding["missing_value"] = dtype.type(mv)
+            fill_value = pop_to(encoding, attrs, "missing_value", name=name)
+            if not pd.isnull(fill_value) and fv is None:
+                data = duck_array_ops.fillna(data, fill_value)
 
         return Variable(dims, data, attrs, encoding, fastpath=True)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
-        _attrs = variable.attrs
-        if "scale_factor" in _attrs or "add_offset" in _attrs:
-            dims, data, attrs, encoding = unpack_for_decoding(variable)
+        dims, data, attrs, encoding = unpack_for_decoding(variable)
 
-            scale_factor = pop_to(attrs, encoding, "scale_factor", name=name)
-            add_offset = pop_to(attrs, encoding, "add_offset", name=name)
-            dtype = _choose_float_dtype(data.dtype, "add_offset" in encoding)
-            if np.ndim(scale_factor) > 0:
-                scale_factor = np.asarray(scale_factor).item()
-            if np.ndim(add_offset) > 0:
-                add_offset = np.asarray(add_offset).item()
-            transform = partial(
-                _scale_offset_decoding,
-                scale_factor=scale_factor,
-                add_offset=add_offset,
-                dtype=dtype,
-            )
-            data = lazy_elemwise_func(data, transform, dtype)
+        raw_fill_values = [
+            pop_to(attrs, encoding, attr, name=name)
+            for attr in ("missing_value", "_FillValue")
+        ]
+        scale_factor = pop_to(attrs, encoding, "scale_factor", name=name)
+        add_offset = pop_to(attrs, encoding, "add_offset", name=name)
+        if scale_factor or add_offset or raw_fill_values:
+            if scale_factor or add_offset:
+                maxsize = 4
+                if scale_factor and np.issubdtype(scale_factor.dtype, np.floating):
+                    maxsize = max(maxsize, scale_factor.dtype.itemsize)
+                if add_offset and np.issubdtype(add_offset.dtype, np.floating):
+                    maxsize = max(maxsize, add_offset.dtype.itemsize)
+                dtype = np.dtype(f"float{maxsize * 8}")
+                # dtype = _choose_float_dtype(data.dtype, "add_offset" in encoding)
+                decoded_fill_value = np.nan
+            else:
+                dtype, decoded_fill_value = dtypes.maybe_promote(data.dtype)
+
+            if raw_fill_values:
+                encoded_fill_values = {
+                    fv
+                    for option in raw_fill_values
+                    for fv in np.ravel(option)
+                    if not pd.isnull(fv)
+                }
+
+                if len(encoded_fill_values) > 1:
+                    warnings.warn(
+                        "variable {!r} has multiple fill values {}, "
+                        "decoding all values to NaN.".format(name, encoded_fill_values),
+                        SerializationWarning,
+                        stacklevel=3,
+                    )
+
+                if encoded_fill_values:
+                    mask_transform = partial(
+                        _apply_mask,
+                        encoded_fill_values=encoded_fill_values,
+                        decoded_fill_value=decoded_fill_value,
+                        dtype=dtype,
+                    )
+                    data = lazy_elemwise_func(data, mask_transform, dtype)
+
+            if scale_factor or add_offset:
+                if np.ndim(scale_factor) > 0:
+                    scale_factor = np.asarray(scale_factor).item()
+                if np.ndim(add_offset) > 0:
+                    add_offset = np.asarray(add_offset).item()
+
+                scale_offset_transform = partial(
+                    _scale_offset_decoding,
+                    scale_factor=scale_factor,
+                    add_offset=add_offset,
+                    dtype=dtype,
+                )
+                data = lazy_elemwise_func(data, scale_offset_transform, dtype)
 
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
@@ -459,10 +543,10 @@ class ObjectStringCoder(VariableCoder):
         return NotImplementedError
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
-        print("decoding VLEN string")
-        print("DEC-VAR:", variable.dtype)
-        print("DEC-ENC:", variable.encoding)
-        print("DEC-ATTRS:", variable.attrs)
+        # print("decoding VLEN string")
+        # print("DEC-VAR:", variable.dtype)
+        # print("DEC-ENC:", variable.encoding)
+        # print("DEC-ATTRS:", variable.attrs)
         if (
             variable.encoding.get("dtype", False) == str
             and variable.encoding.get("_FillValue", None) is None

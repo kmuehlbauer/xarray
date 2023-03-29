@@ -234,7 +234,7 @@ def ensure_dtype_not_object(var: Variable, name: T_Name = None) -> Variable:
 
         missing = pd.isnull(data)
         if missing.any():
-            print("encode object dtype")
+            # print("encode object dtype")
             # nb. this will fail for dask.array data
             non_missing_values = data[~missing]
             inferred_dtype = _infer_dtype(non_missing_values, name)
@@ -285,26 +285,35 @@ def encode_cf_variable(
     out : Variable
         A variable which has been encoded as described above.
     """
+    # print("DTYPE_VAR0:", var.dtype)
     ensure_not_multiindex(var, name=name)
 
     for coder in [
         times.CFDatetimeCoder(),
         times.CFTimedeltaCoder(),
         variables.CFScaleOffsetCoder(),
-        variables.CFMaskCoder(),
+        # variables.CFMaskCoder(),
         variables.UnsignedIntegerCoder(),
     ]:
         var = coder.encode(var, name=name)
+
+    # print("encVAR0:", var)
+    # print("encENC0:", var.encoding)
+    # print("encATTRS0:", var.attrs)
 
     # TODO(shoyer): convert all of these to use coders, too:
     var = maybe_encode_nonstring_dtype(var, name=name)
     var = maybe_default_fill_value(var)
     var = variables.BooleanCoder().encode(var, name=name)
 
-    print("VAR:", var)
-    print("ENC:", var.encoding)
-    print("ATTRS:", var.attrs)
+    # print("encVAR1:", var)
+    # print("encENC1:", var.encoding)
+    # print("encATTRS1:", var.attrs)
     var = ensure_dtype_not_object(var, name=name)
+
+    # print("VAR:", var)
+    # print("ENC:", var.encoding)
+    # print("ATTRS:", var.attrs)
 
     for attr_name in CF_RELATED_DATA:
         pop_to(var.encoding, var.attrs, attr_name)
@@ -372,6 +381,7 @@ def decode_cf_variable(
         return var
 
     original_dtype = var.dtype
+    # print("orig-dtype:", original_dtype)
 
     if decode_timedelta is None:
         decode_timedelta = decode_times
@@ -381,21 +391,23 @@ def decode_cf_variable(
             var = strings.CharacterArrayCoder().decode(var, name=name)
         var = strings.EncodedStringCoder().decode(var)
 
+    # print("DTYPE0:", var.dtype)
     if mask_and_scale:
         for coder in [
             variables.UnsignedIntegerCoder(),
-            variables.CFMaskCoder(),
+            # variables.CFMaskCoder(),
             variables.CFScaleOffsetCoder(),
         ]:
             var = coder.decode(var, name=name)
+            # print("DTYPEX:", var.dtype)
 
     if decode_timedelta:
         var = times.CFTimedeltaCoder().decode(var, name=name)
     if decode_times:
         var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
 
-    if var.dtype == object:
-        var = variables.ObjectStringCoder().decode(var)
+    # if var.dtype == object:
+    #    var = variables.ObjectStringCoder().decode(var)
 
     if decode_endianness:
         var = variables.EndianCoder().decode(var)

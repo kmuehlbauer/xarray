@@ -1096,8 +1096,11 @@ def test_decode_encode_roundtrip_with_non_lowercase_letters(calendar) -> None:
     units = "days since 2000-01-01"
     attrs = {"calendar": calendar, "units": units}
     variable = Variable(["time"], times, attrs)
+    print(variable)
     decoded = conventions.decode_cf_variable("time", variable)
+    print(decoded.load())
     encoded = conventions.encode_cf_variable(decoded)
+    print(encoded)
 
     # Previously this would erroneously be an array of cftime.datetime
     # objects.  We check here that it is decoded properly to np.datetime64.

@@ -149,7 +149,7 @@ class H5NetCDFStore(WritableCFDataStore):
                     f"{magic_number} is not the signature of a valid netCDF4 file"
                 )
 
-        if format not in [None, "NETCDF4"]:
+        if format not in [None, "NETCDF4", "NETCDF4_CLASSIC"]:
             raise ValueError("invalid format for h5netcdf backend")
 
         kwargs = {
@@ -271,9 +271,9 @@ class H5NetCDFStore(WritableCFDataStore):
 
         fillvalue = attrs.pop("_FillValue", None)
 
-        print("fillvalue:", fillvalue)
-        print("dtype:", dtype)
-        print("variable:", variable)
+        # print("fillvalue:", fillvalue)
+        # print("dtype:", dtype)
+        # print("variable:", variable)
         # if dtype is str and fillvalue is not None:
         #     raise NotImplementedError(
         #         "h5netcdf does not yet support setting a fill value for "
