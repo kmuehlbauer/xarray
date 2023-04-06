@@ -207,6 +207,7 @@ def _apply_mask(
     dtype: np.typing.DTypeLike,
 ) -> np.ndarray:
     """Mask all matching values in a NumPy arrays."""
+    # data = np.astype(dtype=dtype, copy=True)
     data = np.asarray(data, dtype=dtype)
     condition = False
     for fv in encoded_fill_values:
@@ -254,10 +255,31 @@ class CFMaskCoder(VariableCoder):
     def decode(self, variable: Variable, name: T_Name = None):
         dims, data, attrs, encoding = unpack_for_decoding(variable)
 
-        raw_fill_values = [
-            pop_to(attrs, encoding, attr, name=name)
-            for attr in ("missing_value", "_FillValue")
-        ]
+        fv = pop_to(attrs, encoding, "_FillValue", name=name)
+        mv = pop_to(attrs, encoding, "missing_value", name=name)
+
+        raw_fill_values = [mv, fv]
+
+        fill_exists = fv is not None or mv is not None
+        fill = False
+        if not fill_exists:
+            try:
+                import netCDF4
+
+                from xarray.backends.scipy_ import ScipyArrayWrapper
+
+                # do this only for NETCDF4 file types
+                # do this not for LazilyIndexedArray's
+                # assume default _FillValue for all floating point data
+                prohibited = [indexing.LazilyIndexedArray, ScipyArrayWrapper]
+                if type(data) not in prohibited and np.issubdtype(
+                    data.dtype, np.floating
+                ):
+                    fill = netCDF4.default_fillvals[variable.dtype.str[1:]]
+                    raw_fill_values.append(fill)
+            except ImportError:
+                pass
+
         if raw_fill_values:
             encoded_fill_values = {
                 fv
@@ -265,7 +287,6 @@ class CFMaskCoder(VariableCoder):
                 for fv in np.ravel(option)
                 if not pd.isnull(fv)
             }
-
             if len(encoded_fill_values) > 1:
                 warnings.warn(
                     "variable {!r} has multiple fill values {}, "
@@ -273,8 +294,10 @@ class CFMaskCoder(VariableCoder):
                     SerializationWarning,
                     stacklevel=3,
                 )
-
             dtype, decoded_fill_value = dtypes.maybe_promote(data.dtype)
+            # override decoded_fill_value in case of new default fill_value
+            if fill:
+                decoded_fill_value = encoded_fill_values
 
             if encoded_fill_values:
                 transform = partial(
@@ -284,7 +307,6 @@ class CFMaskCoder(VariableCoder):
                     dtype=dtype,
                 )
                 data = lazy_elemwise_func(data, transform, dtype)
-
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
