@@ -173,6 +173,11 @@ def encode_cf_variable(
     """
     ensure_not_multiindex(var, name=name)
 
+    print("--------- encode ------------")
+    print(f"attrs: {var.attrs}")
+    print(f"enc: {var.encoding}")
+    print(f"data: {var.data}\n")
+
     for coder in [
         times.CFDatetimeCoder(),
         times.CFTimedeltaCoder(),
@@ -183,7 +188,11 @@ def encode_cf_variable(
         variables.DefaultFillvalueCoder(),
         variables.BooleanCoder(),
     ]:
+        print(f"--------- {coder.__class__.__name__} ------------")
         var = coder.encode(var, name=name)
+        print(f"attrs: {var.attrs}")
+        print(f"enc: {var.encoding}")
+        print(f"data: {var.data}\n")
 
     # TODO(kmuehlbauer): check if ensure_dtype_not_object can be moved to backends:
     var = ensure_dtype_not_object(var, name=name)

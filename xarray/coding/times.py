@@ -622,7 +622,10 @@ def cast_to_int_if_safe(num) -> np.ndarray:
 
 
 def encode_cf_datetime(
-    dates, units: str | None = None, calendar: str | None = None
+    dates,
+    units: str | None = None,
+    calendar: str | None = None,
+    fill_value=None,
 ) -> tuple[np.ndarray, str, str]:
     """Given an array of datetime objects, returns the tuple `(num, units,
     calendar)` suitable for a CF compliant time variable.
@@ -665,6 +668,8 @@ def encode_cf_datetime(
         # Wrap the dates in a DatetimeIndex to do the subtraction to ensure
         # an OverflowError is raised if the ref_date is too far away from
         # dates to be encoded (GH 2272).
+        if fill_value is not None:
+            dates = np.nan_to_num(dates, nan=fill_value)
         dates_as_index = pd.DatetimeIndex(dates.ravel())
         time_deltas = dates_as_index - ref_date
 
@@ -704,8 +709,12 @@ class CFDatetimeCoder(VariableCoder):
         ) or contains_cftime_datetimes(variable):
             dims, data, attrs, encoding = unpack_for_encoding(variable)
 
+            fill_value = pop_to(encoding, attrs, "_FillValue", name=name)
             (data, units, calendar) = encode_cf_datetime(
-                data, encoding.pop("units", None), encoding.pop("calendar", None)
+                data,
+                encoding.pop("units", None),
+                encoding.pop("calendar", None),
+                fill_value,
             )
             safe_setitem(attrs, "units", units, name=name)
             safe_setitem(attrs, "calendar", calendar, name=name)
