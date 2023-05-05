@@ -698,21 +698,30 @@ class CFDatetimeCoder(VariableCoder):
     def __init__(self, use_cftime: bool | None = None) -> None:
         self.use_cftime = use_cftime
 
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
-        if np.issubdtype(
-            variable.data.dtype, np.datetime64
-        ) or contains_cftime_datetimes(variable):
-            dims, data, attrs, encoding = unpack_for_encoding(variable)
+    def check_encode(self, **kwargs):
+        print("XX:", kwargs["dtype"])
+        if np.issubdtype(kwargs["dtype"], np.datetime64) or contains_cftime_datetimes(
+            kwargs["var"]
+        ):
+            return True
+        return False
 
-            (data, units, calendar) = encode_cf_datetime(
-                data, encoding.pop("units", None), encoding.pop("calendar", None)
-            )
-            safe_setitem(attrs, "units", units, name=name)
-            safe_setitem(attrs, "calendar", calendar, name=name)
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        # print(self.__class__.__name__)
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
 
-            return Variable(dims, data, attrs, encoding, fastpath=True)
-        else:
+        (data, units, calendar) = encode_cf_datetime(
+            data, encoding.pop("units", None), encoding.pop("calendar", None)
+        )
+        safe_setitem(attrs, "units", units, name=name)
+        safe_setitem(attrs, "calendar", calendar, name=name)
+
+        return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(var=variable, dtype=variable.data.dtype):
             return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
         units = variable.attrs.get("units", None)
@@ -736,16 +745,24 @@ class CFDatetimeCoder(VariableCoder):
 
 
 class CFTimedeltaCoder(VariableCoder):
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
-        if np.issubdtype(variable.data.dtype, np.timedelta64):
-            dims, data, attrs, encoding = unpack_for_encoding(variable)
+    def check_encode(self, **kwargs):
+        if np.issubdtype(kwargs["dtype"], np.timedelta64):
+            return True
+        return False
 
-            data, units = encode_cf_timedelta(data, encoding.pop("units", None))
-            safe_setitem(attrs, "units", units, name=name)
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        # print(self.__class__.__name__)
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
 
-            return Variable(dims, data, attrs, encoding, fastpath=True)
-        else:
+        data, units = encode_cf_timedelta(data, encoding.pop("units", None))
+        safe_setitem(attrs, "units", units, name=name)
+
+        return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(dtype=variable.dtype):
             return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
         units = variable.attrs.get("units", None)

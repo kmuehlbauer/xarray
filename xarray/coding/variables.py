@@ -217,7 +217,15 @@ def _apply_mask(
 class CFMaskCoder(VariableCoder):
     """Mask or unmask fill values according to CF conventions."""
 
-    def encode(self, variable: Variable, name: T_Name = None):
+    def check_encode(self, **kwargs):
+        encoding = kwargs["encoding"]
+        if ("_FillValue" in encoding and encoding["_FillValue"] is not None) or (
+            "missing_value" in encoding and encoding["missing_value"] is not None
+        ):
+            return True
+        return False
+
+    def _encode(self, variable: Variable, name: T_Name = None):
         dims, data, attrs, encoding = unpack_for_encoding(variable)
 
         dtype = np.dtype(encoding.get("dtype", data.dtype))
@@ -227,9 +235,7 @@ class CFMaskCoder(VariableCoder):
         fv_exists = fv is not None
         mv_exists = mv is not None
 
-        if not fv_exists and not mv_exists:
-            return variable
-
+        # print(self.__class__.__name__)
         if fv_exists and mv_exists and not duck_array_ops.allclose_or_equiv(fv, mv):
             raise ValueError(
                 f"Variable {name!r} has conflicting _FillValue ({fv}) and missing_value ({mv}). Cannot encode data."
@@ -250,6 +256,11 @@ class CFMaskCoder(VariableCoder):
                 data = duck_array_ops.fillna(data, fill_value)
 
         return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(encoding=variable.encoding):
+            return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None):
         dims, data, attrs, encoding = unpack_for_decoding(variable)
@@ -325,18 +336,28 @@ class CFScaleOffsetCoder(VariableCoder):
         decode_values = encoded_values * scale_factor + add_offset
     """
 
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
-        dims, data, attrs, encoding = unpack_for_encoding(variable)
-
+    def check_encode(self, **kwargs):
+        encoding = kwargs["encoding"]
         if "scale_factor" in encoding or "add_offset" in encoding:
-            dtype = _choose_float_dtype(data.dtype, "add_offset" in encoding)
-            data = data.astype(dtype=dtype, copy=True)
+            return True
+        return False
+
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
+        # print(self.__class__.__name__)
+        dtype = _choose_float_dtype(data.dtype, "add_offset" in encoding)
+        data = data.astype(dtype=dtype, copy=True)
         if "add_offset" in encoding:
             data -= pop_to(encoding, attrs, "add_offset", name=name)
         if "scale_factor" in encoding:
             data /= pop_to(encoding, attrs, "scale_factor", name=name)
 
         return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(encoding=variable.encoding):
+            return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
         _attrs = variable.attrs
@@ -364,24 +385,32 @@ class CFScaleOffsetCoder(VariableCoder):
 
 
 class UnsignedIntegerCoder(VariableCoder):
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
+    def check_encode(self, **kwargs):
         # from netCDF best practices
         # https://www.unidata.ucar.edu/software/netcdf/docs/BestPractices.html
         #     "_Unsigned = "true" to indicate that
         #      integer data should be treated as unsigned"
-        if variable.encoding.get("_Unsigned", "false") == "true":
-            dims, data, attrs, encoding = unpack_for_encoding(variable)
+        if kwargs["encoding"].get("_Unsigned", "false") == "true":
+            return True
+        return False
 
-            pop_to(encoding, attrs, "_Unsigned")
-            signed_dtype = np.dtype(f"i{data.dtype.itemsize}")
-            if "_FillValue" in attrs:
-                new_fill = signed_dtype.type(attrs["_FillValue"])
-                attrs["_FillValue"] = new_fill
-            data = duck_array_ops.around(data).astype(signed_dtype)
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        # print(self.__class__.__name__)
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
 
-            return Variable(dims, data, attrs, encoding, fastpath=True)
-        else:
+        pop_to(encoding, attrs, "_Unsigned")
+        signed_dtype = np.dtype(f"i{data.dtype.itemsize}")
+        if "_FillValue" in attrs:
+            new_fill = signed_dtype.type(attrs["_FillValue"])
+            attrs["_FillValue"] = new_fill
+        data = duck_array_ops.around(data).astype(signed_dtype)
+
+        return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(encoding=variable.encoding):
             return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
         if "_Unsigned" in variable.attrs:
@@ -421,18 +450,28 @@ class UnsignedIntegerCoder(VariableCoder):
 class DefaultFillvalueCoder(VariableCoder):
     """Encode default _FillValue if needed."""
 
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
+    def check_encode(self, **kwargs):
+        if (
+            "_FillValue" not in kwargs["attrs"]
+            and "_FillValue" not in kwargs["encoding"]
+            and np.issubdtype(kwargs["dtype"], np.floating)
+        ):
+            return True
+        return False
+
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
         dims, data, attrs, encoding = unpack_for_encoding(variable)
         # make NaN the fill value for float types
-        if (
-            "_FillValue" not in attrs
-            and "_FillValue" not in encoding
-            and np.issubdtype(variable.dtype, np.floating)
+        # print(self.__class__.__name__)
+        attrs["_FillValue"] = variable.dtype.type(np.nan)
+        return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(
+            dtype=variable.dtype, attrs=variable.attrs, encoding=variable.encoding
         ):
-            attrs["_FillValue"] = variable.dtype.type(np.nan)
-            return Variable(dims, data, attrs, encoding, fastpath=True)
-        else:
             return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
         raise NotImplementedError()
@@ -441,19 +480,29 @@ class DefaultFillvalueCoder(VariableCoder):
 class BooleanCoder(VariableCoder):
     """Code boolean values."""
 
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
+    def check_encode(self, **kwargs):
         if (
-            (variable.dtype == bool)
-            and ("dtype" not in variable.encoding)
-            and ("dtype" not in variable.attrs)
+            (kwargs["dtype"] == bool)
+            and ("dtype" not in kwargs["encoding"])
+            and ("dtype" not in kwargs["attrs"])
         ):
-            dims, data, attrs, encoding = unpack_for_encoding(variable)
-            attrs["dtype"] = "bool"
-            data = duck_array_ops.astype(data, dtype="i1", copy=True)
+            return True
+        return False
 
-            return Variable(dims, data, attrs, encoding, fastpath=True)
-        else:
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        # print(self.__class__.__name__)
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
+        attrs["dtype"] = "bool"
+        data = duck_array_ops.astype(data, dtype="i1", copy=True)
+
+        return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(
+            dtype=variable.dtype, attrs=variable.attrs, encoding=variable.encoding
+        ):
             return variable
+        return self._encode(variable, name=name)
 
     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
         if variable.attrs.get("dtype", False) == "bool":
@@ -485,32 +534,40 @@ class EndianCoder(VariableCoder):
 class NonStringCoder(VariableCoder):
     """Encode NonString variables if dtypes differ."""
 
-    def encode(self, variable: Variable, name: T_Name = None) -> Variable:
-        if "dtype" in variable.encoding and variable.encoding["dtype"] not in (
+    def check_encode(self, **kwargs):
+        if "dtype" in kwargs["encoding"] and kwargs["encoding"]["dtype"] not in (
             "S1",
             str,
         ):
-            dims, data, attrs, encoding = unpack_for_encoding(variable)
-            dtype = np.dtype(encoding.pop("dtype"))
-            if dtype != variable.dtype:
-                if np.issubdtype(dtype, np.integer):
-                    if (
-                        np.issubdtype(variable.dtype, np.floating)
-                        and "_FillValue" not in variable.attrs
-                        and "missing_value" not in variable.attrs
-                    ):
-                        warnings.warn(
-                            f"saving variable {name} with floating "
-                            "point data as an integer dtype without "
-                            "any _FillValue to use for NaNs",
-                            SerializationWarning,
-                            stacklevel=10,
-                        )
-                    data = np.around(data)
-                data = data.astype(dtype=dtype)
-            return Variable(dims, data, attrs, encoding, fastpath=True)
-        else:
+            return True
+        return False
+
+    def _encode(self, variable: Variable, name: T_Name = None) -> Variable:
+        dims, data, attrs, encoding = unpack_for_encoding(variable)
+        dtype = np.dtype(encoding.pop("dtype"))
+        if dtype != variable.dtype:
+            # print(self.__class__.__name__)
+            if np.issubdtype(dtype, np.integer):
+                if (
+                    np.issubdtype(variable.dtype, np.floating)
+                    and "_FillValue" not in variable.attrs
+                    and "missing_value" not in variable.attrs
+                ):
+                    warnings.warn(
+                        f"saving variable {name} with floating "
+                        "point data as an integer dtype without "
+                        "any _FillValue to use for NaNs",
+                        SerializationWarning,
+                        stacklevel=10,
+                    )
+                data = np.around(data)
+            data = data.astype(dtype=dtype)
+        return Variable(dims, data, attrs, encoding, fastpath=True)
+
+    def encode(self, variable: Variable, name: T_Name = None):
+        if not self.check_encode(encoding=variable.encoding):
             return variable
+        return self._encode(variable, name=name)
 
     def decode(self):
         raise NotImplementedError()

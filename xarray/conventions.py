@@ -149,6 +149,36 @@ def ensure_dtype_not_object(var: Variable, name: T_Name = None) -> Variable:
     return var
 
 
+def check_encoding(var: Variable) -> list:
+    print("YY:", var.dtype, var.data.dtype)
+    coders = []
+    dtype = var.data.dtype
+    attrs = var.attrs.copy()
+    encoding = var.encoding.copy()
+
+    for coder in [
+        times.CFDatetimeCoder(),
+        times.CFTimedeltaCoder(),
+        variables.CFScaleOffsetCoder(),
+        variables.CFMaskCoder(),
+        variables.UnsignedIntegerCoder(),
+        variables.NonStringCoder(),
+        variables.DefaultFillvalueCoder(),
+        variables.BooleanCoder(),
+    ]:
+        print("dtype:", dtype, np.issubdtype(dtype, np.datetime64))
+        if coder.check_encode(var=var, dtype=dtype, attrs=attrs, encoding=encoding):
+            coders.append(coder)
+            if isinstance(coder, (times.CFDatetimeCoder, times.CFTimedeltaCoder)):
+                dtype = np.int64
+            if isinstance(coder, variables.NonStringCoder):
+                enc_type = np.dtype(encoding.pop("dtype"))
+                if enc_type != dtype:
+                    dtype = enc_type
+
+    return coders
+
+
 def encode_cf_variable(
     var: Variable, needs_copy: bool = True, name: T_Name = None
 ) -> Variable:
@@ -172,18 +202,28 @@ def encode_cf_variable(
         A variable which has been encoded as described above.
     """
     ensure_not_multiindex(var, name=name)
-
-    for coder in [
-        times.CFDatetimeCoder(),
-        times.CFTimedeltaCoder(),
-        variables.CFScaleOffsetCoder(),
-        variables.CFMaskCoder(),
-        variables.UnsignedIntegerCoder(),
-        variables.NonStringCoder(),
-        variables.DefaultFillvalueCoder(),
-        variables.BooleanCoder(),
-    ]:
-        var = coder.encode(var, name=name)
+    print("name:", name)
+    coders = check_encoding(var)
+    print("coders:", coders)
+    print("var-enc:", var.encoding)
+    print("var:", var)
+    print("var-dtype:", var.dtype, var.data.dtype)
+    for coder in coders:
+        # for coder in [
+        #     times.CFDatetimeCoder(),
+        #     times.CFTimedeltaCoder(),
+        #     variables.CFScaleOffsetCoder(),
+        #     variables.CFMaskCoder(),
+        #     variables.UnsignedIntegerCoder(),
+        #     variables.NonStringCoder(),
+        #     variables.DefaultFillvalueCoder(),
+        #     variables.BooleanCoder(),
+        # ]:
+        print(coder.__class__.__name__)
+        var = coder._encode(var, name=name)
+        print("var-enc1:", var.encoding)
+        print("var1:", var)
+        print("var-dtype1:", var.dtype, var.data.dtype)
 
     # TODO(kmuehlbauer): check if ensure_dtype_not_object can be moved to backends:
     var = ensure_dtype_not_object(var, name=name)

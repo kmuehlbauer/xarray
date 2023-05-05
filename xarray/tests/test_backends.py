@@ -627,11 +627,13 @@ class DatasetIOBase:
     def test_roundtrip_boolean_dtype(self) -> None:
         original = create_boolean_data()
         assert original["x"].dtype == "bool"
+        print("####################################")
         with self.roundtrip(original) as actual:
             assert_identical(original, actual)
             assert actual["x"].dtype == "bool"
             # this checks for preserving dtype during second roundtrip
             # see https://github.com/pydata/xarray/issues/7652#issuecomment-1476956975
+            print("####################################")
             with self.roundtrip(actual) as actual2:
                 assert_identical(original, actual2)
                 assert actual2["x"].dtype == "bool"
