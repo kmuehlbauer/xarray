@@ -651,7 +651,7 @@ def encode_cf_datetime(
         assert dates.dtype == "datetime64[ns]"
 
         delta_units = _netcdf_to_numpy_timeunit(delta)
-        time_delta = np.timedelta64(1, delta_units).astype("timedelta64[ns]")
+        time_delta = np.timedelta64(1, delta_units).astype("timedelta64[ns]").astype(np.int64)
 
         # TODO: the strict enforcement of nanosecond precision Timestamps can be
         # relaxed when addressing GitHub issue #7493.
@@ -667,14 +667,15 @@ def encode_cf_datetime(
         # dates to be encoded (GH 2272).
         dates_as_index = pd.DatetimeIndex(dates.ravel())
         time_deltas = dates_as_index - ref_date
-
+        time_deltas = time_deltas.values.astype(np.int64)
         # Use floor division if time_delta evenly divides all differences
-        # to preserve integer dtype if possible (GH 4045).
-        if np.all(time_deltas % time_delta == np.timedelta64(0, "ns")):
+        # to preserve integer dtype if possible (GH 4045)
+        # NaT prevents us from using int64 data.
+        if np.all(time_deltas % time_delta == np.timedelta64(0, "ns").astype(np.int64)):
             num = time_deltas // time_delta
         else:
             num = time_deltas / time_delta
-        num = num.values.reshape(dates.shape)
+        num = num.reshape(dates.shape)
 
     except (OutOfBoundsDatetime, OverflowError, ValueError):
         num = _encode_datetime_with_cftime(dates, units, calendar)

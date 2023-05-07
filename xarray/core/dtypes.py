@@ -64,13 +64,13 @@ def maybe_promote(dtype):
         # np.timedelta64 is a subclass of np.integer
         # Check np.timedelta64 before np.integer
         fill_value = np.timedelta64("NaT")
+    elif np.issubdtype(dtype, np.datetime64):
+        fill_value = np.datetime64("NaT")
     elif np.issubdtype(dtype, np.integer):
         dtype = np.float32 if dtype.itemsize <= 2 else np.float64
         fill_value = np.nan
     elif np.issubdtype(dtype, np.complexfloating):
         fill_value = np.nan + np.nan * 1j
-    elif np.issubdtype(dtype, np.datetime64):
-        fill_value = np.datetime64("NaT")
     else:
         dtype = object
         fill_value = np.nan

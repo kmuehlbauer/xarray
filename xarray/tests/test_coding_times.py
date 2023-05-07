@@ -133,8 +133,9 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
     assert (abs_diff <= np.timedelta64(1, "s")).all()
+    print(actual, units, calendar)
     encoded, _, _ = coding.times.encode_cf_datetime(actual, units, calendar)
-
+    print(encoded)
     assert_array_equal(num_dates, np.around(encoded, 1))
     if hasattr(num_dates, "ndim") and num_dates.ndim == 1 and "1000" not in units:
         # verify that wrapping with a pandas.Index works
@@ -1030,7 +1031,7 @@ def test_encode_cf_datetime_defaults_to_correct_dtype(
         pytest.skip("Test requires cftime")
     if (freq == "N" or encoding_units == "nanoseconds") and date_range == cftime_range:
         pytest.skip("Nanosecond frequency is not valid for cftime dates.")
-    times = date_range("2000", periods=3, freq=freq)
+    times = date_range("2000", periods=4, freq=freq)
     units = f"{encoding_units} since 2000-01-01"
     encoded, _, _ = coding.times.encode_cf_datetime(times, units)
 
