@@ -712,6 +712,14 @@ class CFDatetimeCoder(VariableCoder):
             safe_setitem(attrs, "units", units, name=name)
             safe_setitem(attrs, "calendar", calendar, name=name)
 
+            # in the presence of _FillValue, remove it from encoding
+            fill_value = encoding.pop("_FillValue", None)
+            if fill_value is not None:
+                # get the dtype
+                dtype = np.dtype(encoding.get("dtype", data.dtype))
+                # and write _FillValue with the wanted type to attrs
+                safe_setitem(attrs, "_FillValue", dtype.type(fill_value), name=name)
+
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
