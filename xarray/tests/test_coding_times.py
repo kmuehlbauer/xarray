@@ -1031,6 +1031,8 @@ def test_encode_cf_datetime_defaults_to_correct_dtype(
     if (freq == "N" or encoding_units == "nanoseconds") and date_range == cftime_range:
         pytest.skip("Nanosecond frequency is not valid for cftime dates.")
     times = date_range("2000", periods=3, freq=freq)
+    if date_range == pd.date_range:
+        times = times.append(pd.Index(np.array(["NaT"], dtype="M8[D]")))
     units = f"{encoding_units} since 2000-01-01"
     encoded, _, _ = coding.times.encode_cf_datetime(times, units)
 

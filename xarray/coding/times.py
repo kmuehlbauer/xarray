@@ -669,9 +669,12 @@ def encode_cf_datetime(
         time_deltas = dates_as_index - ref_date
 
         # Use floor division if time_delta evenly divides all differences
-        # to preserve integer dtype if possible (GH 4045).
-        if np.all(time_deltas % time_delta == np.timedelta64(0, "ns")):
-            num = time_deltas // time_delta
+        # to preserve integer dtype if possible (GH 4045)
+        # NaT prevents us from using datetime64 directly, but we can safely coerce
+        # to int64 in presence of NaT, so we just dropna before check.
+        if np.all(time_deltas.dropna() % time_delta == np.timedelta64(0, "ns")):
+            num = time_deltas // time_delta.astype(np.int64)
+            num = num.astype(np.int64)
         else:
             num = time_deltas / time_delta
         num = num.values.reshape(dates.shape)

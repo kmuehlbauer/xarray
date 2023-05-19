@@ -173,16 +173,18 @@ def encode_cf_variable(
     """
     ensure_not_multiindex(var, name=name)
 
-    for coder in [
-        times.CFDatetimeCoder(),
-        times.CFTimedeltaCoder(),
-        variables.CFScaleOffsetCoder(),
-        variables.CFMaskCoder(),
-        variables.UnsignedIntegerCoder(),
-        variables.NonStringCoder(),
-        variables.DefaultFillvalueCoder(),
-        variables.BooleanCoder(),
-    ]:
+    for i, coder in enumerate(
+        [
+            times.CFTimedeltaCoder(),
+            times.CFDatetimeCoder(),
+            variables.CFScaleOffsetCoder(),
+            variables.CFMaskCoder(),
+            variables.UnsignedIntegerCoder(),
+            variables.NonStringCoder(),
+            variables.DefaultFillvalueCoder(),
+            variables.BooleanCoder(),
+        ]
+    ):
         var = coder.encode(var, name=name)
 
     # TODO(kmuehlbauer): check if ensure_dtype_not_object can be moved to backends:

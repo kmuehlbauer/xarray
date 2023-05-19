@@ -236,12 +236,19 @@ class CFMaskCoder(VariableCoder):
                 f"Variable {name!r} has conflicting _FillValue ({fv}) and missing_value ({mv}). Cannot encode data."
             )
 
+        units = attrs.get("units", None)
+        is_time = isinstance(units, str) and "since" in units
+
         if fv_exists:
             # Ensure _FillValue is cast to same dtype as data's
             encoding["_FillValue"] = dtype.type(fv)
             fill_value = pop_to(encoding, attrs, "_FillValue", name=name)
             if not pd.isnull(fill_value):
-                data = duck_array_ops.fillna(data, fill_value)
+                if is_time:
+                    nat = np.datetime64("NaT", "ns").astype(dtype)
+                    data = duck_array_ops.where_method(data, data != nat, fill_value)
+                else:
+                    data = duck_array_ops.fillna(data, fill_value)
 
         if mv_exists:
             # Ensure missing_value is cast to same dtype as data's
@@ -428,9 +435,9 @@ class DefaultFillvalueCoder(VariableCoder):
         if (
             "_FillValue" not in attrs
             and "_FillValue" not in encoding
-            and np.issubdtype(variable.dtype, np.floating)
+            and np.issubdtype(encoding.get("dtype", variable.dtype), np.floating)
         ):
-            attrs["_FillValue"] = variable.dtype.type(np.nan)
+            attrs["_FillValue"] = encoding.get("dtype", variable.dtype.type)(np.nan)
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
@@ -494,7 +501,9 @@ class NonStringCoder(VariableCoder):
             dims, data, attrs, encoding = unpack_for_encoding(variable)
             dtype = np.dtype(encoding.pop("dtype"))
             if dtype != variable.dtype:
-                if np.issubdtype(dtype, np.integer):
+                if np.issubdtype(variable.dtype, np.timedelta64):
+                    data = duck_array_ops.astype(data, dtype=np.int64, copy=True)
+                elif np.issubdtype(dtype, np.integer):
                     if (
                         np.issubdtype(variable.dtype, np.floating)
                         and "_FillValue" not in variable.attrs
@@ -508,7 +517,7 @@ class NonStringCoder(VariableCoder):
                             stacklevel=10,
                         )
                     data = np.around(data)
-                data = data.astype(dtype=dtype)
+                data = duck_array_ops.astype(data, dtype=dtype, copy=True)
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
