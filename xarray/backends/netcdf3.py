@@ -64,6 +64,11 @@ def coerce_nc3_dtype(arr):
         new_dtype = _nc3_dtype_coercions[dtype]
         # TODO: raise a warning whenever casting the data-type instead?
         print(arr)
+        if dtype == "int64":
+            from xarray.core import duck_array_ops
+
+            arr = duck_array_ops.where(arr != -9223372036854775808, arr, np.nan)
+            return arr.astype("float32")
         cast_arr = arr.astype(new_dtype)
         if not (cast_arr == arr).all():
             raise ValueError(

@@ -117,14 +117,17 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
     expected = cftime.num2date(
         num_dates, units, calendar, only_use_cftime_datetimes=True
     )
+    print("expected:", expected)
     min_y = np.ravel(np.atleast_1d(expected))[np.nanargmin(num_dates)].year
     max_y = np.ravel(np.atleast_1d(expected))[np.nanargmax(num_dates)].year
+    print(min_y, max_y)
     if min_y >= 1678 and max_y < 2262:
         expected = cftime_to_nptime(expected)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "Unable to decode time axis")
         actual = coding.times.decode_cf_datetime(num_dates, units, calendar)
+        print(actual, units, calendar)
 
     abs_diff = np.asarray(abs(actual - expected)).ravel()
     abs_diff = pd.to_timedelta(abs_diff.tolist()).to_numpy()
@@ -134,7 +137,9 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
     # https://github.com/Unidata/netcdf4-python/issues/355
     assert (abs_diff <= np.timedelta64(1, "s")).all()
     encoded, _, _ = coding.times.encode_cf_datetime(actual, units, calendar)
-
+    print(num_dates)
+    print(encoded)
+    print(np.around(encoded, 1))
     assert_array_equal(num_dates, np.around(encoded, 1))
     if hasattr(num_dates, "ndim") and num_dates.ndim == 1 and "1000" not in units:
         # verify that wrapping with a pandas.Index works

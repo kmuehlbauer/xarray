@@ -171,6 +171,20 @@ def _unpack_netcdf_time_units(units: str) -> tuple[str, str]:
     return delta_units, ref_date
 
 
+def _unpack_delta_ref_date(units):
+    # same us _unpack_netcdf_time_units but finalizes ref_date for
+    # processing in encode_cf_datetime
+    delta, _ref_date = _unpack_netcdf_time_units(units)
+    # TODO: the strict enforcement of nanosecond precision Timestamps can be
+    # relaxed when addressing GitHub issue #7493.
+    ref_date = nanosecond_precision_timestamp(_ref_date)
+    # If the ref_date Timestamp is timezone-aware, convert to UTC and
+    # make it timezone-naive (GH 2649).
+    if ref_date.tz is not None:
+        ref_date = ref_date.tz_convert(None)
+    return delta, ref_date
+
+
 def _decode_cf_datetime_dtype(
     data, units: str, calendar: str, use_cftime: bool | None
 ) -> np.dtype:
@@ -569,6 +583,9 @@ def _should_cftime_be_used(
 
 def _cleanup_netcdf_time_units(units: str) -> str:
     delta, ref_date = _unpack_netcdf_time_units(units)
+    delta = delta.lower()
+    if not delta.endswith("s"):
+        delta = f"{delta}s"
     try:
         units = f"{delta} since {format_timestamp(ref_date)}"
     except (OutOfBoundsDatetime, ValueError):
@@ -629,32 +646,55 @@ def encode_cf_datetime(
     """
     dates = np.asarray(dates)
 
+    data_units = infer_datetime_units(dates)
+
     if units is None:
-        units = infer_datetime_units(dates)
+        units = data_units
     else:
         units = _cleanup_netcdf_time_units(units)
+
+    # print("units:", units)
+    # print("data_units:", data_units)
+    #
+    # data_delta, data_ref_date = _unpack_netcdf_time_units(data_units)
+    # wanted_delta, wanted_ref_date = _unpack_netcdf_time_units(units)
+    # print("X0:", wanted_ref_date, data_ref_date)
+
+    #
+    # print("X2:", needed_delta)
 
     if calendar is None:
         calendar = infer_calendar_name(dates)
 
-    delta, _ref_date = _unpack_netcdf_time_units(units)
     try:
         if not _is_standard_calendar(calendar) or dates.dtype.kind == "O":
             # parse with cftime instead
             raise OutOfBoundsDatetime
         assert dates.dtype == "datetime64[ns]"
 
+        delta, ref_date = _unpack_delta_ref_date(units)
         delta_units = _netcdf_to_numpy_timeunit(delta)
         time_delta = np.timedelta64(1, delta_units).astype("timedelta64[ns]")
 
-        # TODO: the strict enforcement of nanosecond precision Timestamps can be
-        # relaxed when addressing GitHub issue #7493.
-        ref_date = nanosecond_precision_timestamp(_ref_date)
-
-        # If the ref_date Timestamp is timezone-aware, convert to UTC and
-        # make it timezone-naive (GH 2649).
-        if ref_date.tz is not None:
-            ref_date = ref_date.tz_convert(None)
+        # check if times can be represented with given units
+        if data_units != units:
+            print(data_units, units)
+            data_delta, data_ref_date = _unpack_delta_ref_date(data_units)
+            needed_delta = _infer_time_units_from_diff(
+                (data_ref_date - ref_date).to_timedelta64()
+            )
+            print(delta, data_delta, needed_delta)
+            print(ref_date, data_ref_date)
+            needed_time_delta = np.timedelta64(
+                1, _netcdf_to_numpy_timeunit(needed_delta)
+            ).astype("timedelta64[ns]")
+            print(time_delta, needed_time_delta)
+            if needed_delta != delta and time_delta > needed_time_delta:
+                # raise RuntimeError(
+                warnings.warn(
+                    f"Times can't be serialized faithfully with requested units {units!r}. "
+                    f"Resolution of {needed_delta!r} needed. Serializing timeseries to floating point."
+                )
 
         # Wrap the dates in a DatetimeIndex to do the subtraction to ensure
         # an OverflowError is raised if the ref_date is too far away from
@@ -662,12 +702,16 @@ def encode_cf_datetime(
         dates_as_index = pd.DatetimeIndex(dates.ravel())
         time_deltas = dates_as_index - ref_date
 
+        print("TD0:", time_deltas)
+        print("TD1:", time_delta)
+        print("TD2:", time_deltas % time_delta)
+
         # Use floor division if time_delta evenly divides all differences
         # to preserve integer dtype if possible (GH 4045).
         # NaT prevents us from using datetime64 directly, but we can safely coerce
         # to int64 in presence of NaT, so we just dropna before check (GH 7817).
-        if np.all(time_deltas % time_delta == np.timedelta64(0, "ns")):
-            # if np.all(time_deltas.dropna() % time_delta == np.timedelta64(0, "ns")):
+        # if np.all(time_deltas % time_delta == np.timedelta64(0, "ns")):
+        if np.all(time_deltas.dropna() % time_delta == np.timedelta64(0, "ns")):
             # calculate int64 floor division
             print("TD:", time_delta, time_delta.astype(np.int64))
             num = time_deltas // time_delta.astype(np.int64)
