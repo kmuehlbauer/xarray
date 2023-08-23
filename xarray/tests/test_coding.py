@@ -45,8 +45,13 @@ CFMASKCODER_ENCODE_DTYPE_CONFLICT_TESTS = {
     ids=list(CFMASKCODER_ENCODE_DTYPE_CONFLICT_TESTS.keys()),
 )
 def test_CFMaskCoder_encode_missing_fill_values_conflict(data, encoding) -> None:
+    print(data)
+    print(encoding)
     original = xr.Variable(("x",), data, encoding=encoding)
+    print(original)
+    print(original.encoding)
     encoded = encode_cf_variable(original)
+    print(encoded)
 
     assert encoded.dtype == encoded.attrs["missing_value"].dtype
     assert encoded.dtype == encoded.attrs["_FillValue"].dtype

@@ -267,6 +267,11 @@ def decode_cf_variable(
             var = strings.CharacterArrayCoder().decode(var, name=name)
         var = strings.EncodedStringCoder().decode(var)
 
+    if decode_timedelta:
+        var = times.CFTimedeltaCoder().decode(var, name=name)
+    if decode_times:
+        var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
+
     if mask_and_scale:
         for coder in [
             variables.UnsignedIntegerCoder(),
@@ -274,11 +279,6 @@ def decode_cf_variable(
             variables.CFScaleOffsetCoder(),
         ]:
             var = coder.decode(var, name=name)
-
-    if decode_timedelta:
-        var = times.CFTimedeltaCoder().decode(var, name=name)
-    if decode_times:
-        var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
 
     if decode_endianness and not var.dtype.isnative:
         var = variables.EndianCoder().decode(var)

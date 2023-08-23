@@ -63,6 +63,7 @@ def coerce_nc3_dtype(arr):
     if dtype in _nc3_dtype_coercions:
         new_dtype = _nc3_dtype_coercions[dtype]
         # TODO: raise a warning whenever casting the data-type instead?
+        print(arr)
         cast_arr = arr.astype(new_dtype)
         if not (cast_arr == arr).all():
             raise ValueError(

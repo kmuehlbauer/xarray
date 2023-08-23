@@ -222,6 +222,7 @@ class CFMaskCoder(VariableCoder):
         dims, data, attrs, encoding = unpack_for_encoding(variable)
 
         dtype = np.dtype(encoding.get("dtype", data.dtype))
+
         fv = encoding.get("_FillValue")
         mv = encoding.get("missing_value")
 
@@ -236,19 +237,38 @@ class CFMaskCoder(VariableCoder):
                 f"Variable {name!r} has conflicting _FillValue ({fv}) and missing_value ({mv}). Cannot encode data."
             )
 
+        # special case time variables
+        units = variable.attrs.get("units", None)
+        is_cf_time = (
+            isinstance(units, str)
+            and "since" in units
+            and np.issubdtype(dtype, np.int64)
+        )
+
         if fv_exists:
             # Ensure _FillValue is cast to same dtype as data's
             encoding["_FillValue"] = dtype.type(fv)
             fill_value = pop_to(encoding, attrs, "_FillValue", name=name)
+            print("FV:", fill_value, fv)
             if not pd.isnull(fill_value):
-                data = duck_array_ops.fillna(data, fill_value)
+                if is_cf_time:
+                    data = duck_array_ops.where(
+                        data != -9223372036854775808, data, fill_value
+                    )
+                else:
+                    data = duck_array_ops.fillna(data, fill_value)
 
         if mv_exists:
             # Ensure missing_value is cast to same dtype as data's
             encoding["missing_value"] = dtype.type(mv)
             fill_value = pop_to(encoding, attrs, "missing_value", name=name)
             if not pd.isnull(fill_value) and not fv_exists:
-                data = duck_array_ops.fillna(data, fill_value)
+                if is_cf_time:
+                    data = duck_array_ops.where(
+                        data != -9223372036854775808, data, fill_value
+                    )
+                else:
+                    data = duck_array_ops.fillna(data, fill_value)
 
         return Variable(dims, data, attrs, encoding, fastpath=True)
 
@@ -277,6 +297,8 @@ class CFMaskCoder(VariableCoder):
 
             dtype, decoded_fill_value = dtypes.maybe_promote(data.dtype)
 
+            print("FillValue enc,dec:", encoded_fill_values, decoded_fill_value)
+            print("dtype:", dtype)
             if encoded_fill_values:
                 transform = partial(
                     _apply_mask,

@@ -664,8 +664,16 @@ def encode_cf_datetime(
 
         # Use floor division if time_delta evenly divides all differences
         # to preserve integer dtype if possible (GH 4045).
+        # NaT prevents us from using datetime64 directly, but we can safely coerce
+        # to int64 in presence of NaT, so we just dropna before check (GH 7817).
         if np.all(time_deltas % time_delta == np.timedelta64(0, "ns")):
-            num = time_deltas // time_delta
+            # if np.all(time_deltas.dropna() % time_delta == np.timedelta64(0, "ns")):
+            # calculate int64 floor division
+            print("TD:", time_delta, time_delta.astype(np.int64))
+            num = time_deltas // time_delta.astype(np.int64)
+            print("NUM:", num)
+            num = num.astype(np.int64, copy=False)
+            print("NUM:", num)
         else:
             num = time_deltas / time_delta
         num = num.values.reshape(dates.shape)
@@ -698,9 +706,20 @@ class CFDatetimeCoder(VariableCoder):
         ) or contains_cftime_datetimes(variable):
             dims, data, attrs, encoding = unpack_for_encoding(variable)
 
-            (data, units, calendar) = encode_cf_datetime(
-                data, encoding.pop("units", None), encoding.pop("calendar", None)
-            )
+            units = encoding.pop("units", None)
+            calendar = encoding.pop("calendar", None)
+            (data, units, calendar) = encode_cf_datetime(data, units, calendar)
+            print(data, units, calendar)
+            # encode possible fill_values in encoding to be used in CFMaskCoder
+            for fv_name in ("missing_value", "_FillValue"):
+                d = (encoding, attrs)
+                for att in d:
+                    fv = att.get(fv_name, None)
+                    if fv is None:
+                        continue
+                    if fv.dtype == "datetime64[ns]":
+                        att[fv_name], _, _ = encode_cf_datetime(fv, units, calendar)
+
             safe_setitem(attrs, "units", units, name=name)
             safe_setitem(attrs, "calendar", calendar, name=name)
 
@@ -716,6 +735,22 @@ class CFDatetimeCoder(VariableCoder):
             units = pop_to(attrs, encoding, "units")
             calendar = pop_to(attrs, encoding, "calendar")
             dtype = _decode_cf_datetime_dtype(data, units, calendar, self.use_cftime)
+
+            # decode possible fill_values in attrs to be used in CFMaskCoder
+            for fv_name in ("missing_value", "_FillValue"):
+                fv = attrs.get(fv_name, None)
+                if fv is None:
+                    continue
+                try:
+                    attrs[fv_name] = decode_cf_datetime(
+                        fv,
+                        units=units,
+                        calendar=calendar,
+                        use_cftime=self.use_cftime,
+                    )
+                except OverflowError:
+                    pass
+
             transform = partial(
                 decode_cf_datetime,
                 units=units,
