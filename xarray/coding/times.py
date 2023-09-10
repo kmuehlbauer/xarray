@@ -661,6 +661,9 @@ def encode_cf_datetime(
     else:
         units = _cleanup_netcdf_time_units(units)
 
+    print("data_units:", data_units)
+    print("units:", units)
+
     if calendar is None:
         calendar = infer_calendar_name(dates)
 
@@ -671,30 +674,59 @@ def encode_cf_datetime(
         assert dates.dtype == "datetime64[ns]"
 
         time_units, ref_date = _unpack_time_units_and_ref_date(units)
+        print("time_units:", time_units)
+        print("ref_date:", ref_date)
         time_units = _netcdf_to_numpy_timeunit(time_units)
         time_delta = np.timedelta64(1, time_units).astype("timedelta64[ns]")
-
-        # check if times can be represented with given units
-        if data_units != units:
-            _, data_ref_date = _unpack_time_units_and_ref_date(data_units)
-            needed_units = _infer_time_units_from_diff(
-                (data_ref_date - ref_date).to_timedelta64()
-            )
-            needed_time_delta = np.timedelta64(
-                1, _netcdf_to_numpy_timeunit(needed_units)
-            ).astype("timedelta64[ns]")
-            if needed_units != time_units and time_delta > needed_time_delta:
-                emit_user_level_warning(
-                    f"Times can't be serialized faithfully with requested units {units!r}. "
-                    f"Resolution of {needed_units!r} needed. "
-                    f"Serializing timeseries to floating point."
-                )
+        print("time_delta:", time_delta)
 
         # Wrap the dates in a DatetimeIndex to do the subtraction to ensure
         # an OverflowError is raised if the ref_date is too far away from
         # dates to be encoded (GH 2272).
         dates_as_index = pd.DatetimeIndex(dates.ravel())
         time_deltas = dates_as_index - ref_date
+
+        # check if times can be represented with given units
+        if data_units != units:
+            data_time_units, data_ref_date = _unpack_time_units_and_ref_date(data_units)
+            print("data_time_units:", data_time_units)
+            print("data_ref_date:", data_ref_date)
+
+            data_time_delta = np.timedelta64(1, _netcdf_to_numpy_timeunit(data_time_units)).astype("timedelta64[ns]")
+            print("data_time_delta:", data_time_delta)
+
+            # test case
+            # data_units = minutes since 1970-01-01
+            # units = hours since 1970-01-01
+            ref_delta = abs(data_ref_date - ref_date).to_timedelta64()
+            print()
+            print("ref_delta:", ref_delta)
+            print("ref_units:",  _infer_time_units_from_diff(ref_delta))
+            if ref_delta > np.timedelta64(0, "ns"):
+                # this accounts for differences in the reference times
+                needed_units = _infer_time_units_from_diff(ref_delta)
+            else:
+                # if there are no differences in reference time just use data_time_unit
+                needed_units = data_time_units
+
+            print("needed_units:", needed_units)
+
+            # needed time delta to encode faithfully
+            needed_time_delta = np.timedelta64(
+                1, _netcdf_to_numpy_timeunit(needed_units)
+            ).astype("timedelta64[ns]")
+            print("needed_time_delta:", needed_time_delta)
+
+            print("TD:", time_delta, needed_time_delta)
+            print(time_delta < needed_time_delta)
+            print(_netcdf_to_numpy_timeunit(needed_units) != units)
+            #
+            if _netcdf_to_numpy_timeunit(needed_units) != units and time_delta > needed_time_delta:
+                emit_user_level_warning(
+                    f"Times can't be serialized faithfully with requested units {units!r}. "
+                    f"Resolution of {needed_units!r} needed. "
+                    f"Serializing timeseries to floating point."
+                )
 
         # Use floor division if time_delta evenly divides all differences
         # to preserve integer dtype if possible (GH 4045).
@@ -710,18 +742,39 @@ def encode_cf_datetime(
 
     except (OutOfBoundsDatetime, OverflowError, ValueError):
         num = _encode_datetime_with_cftime(dates, units, calendar)
+        # we do it now only for cftime-based flow, since we already did it for pandas-based flow
+        #
+        num = cast_to_int_if_safe(num)
+    print("NUM:", num)
 
-    num = cast_to_int_if_safe(num)
     return (num, units, calendar)
 
 
 def encode_cf_timedelta(timedeltas, units: str | None = None) -> tuple[np.ndarray, str]:
+    data_units = infer_timedelta_units(timedeltas)
+
     if units is None:
-        units = infer_timedelta_units(timedeltas)
+        units = data_units
 
     np_unit = _netcdf_to_numpy_timeunit(units)
 
     time_delta = np.timedelta64(1, np_unit).astype("timedelta64[ns]")
+
+    # check if timedeltas can be represented with given units
+    if data_units != units:
+        needed_units = _infer_time_units_from_diff(
+            (timedeltas)
+        )
+        needed_time_delta = np.timedelta64(
+            1, _netcdf_to_numpy_timeunit(needed_units)
+        ).astype("timedelta64[ns]")
+        if needed_units != units and time_delta > needed_time_delta:
+            emit_user_level_warning(
+                f"Timedeltas can't be serialized faithfully with requested units {units!r}. "
+                f"Resolution of {needed_units!r} needed. "
+                f"Serializing timedeltas to floating point."
+            )
+
     time_deltas = pd.TimedeltaIndex(timedeltas.ravel())
 
     if np.all(time_deltas.dropna() % time_delta == np.timedelta64(0, "ns")):
@@ -745,7 +798,7 @@ class CFDatetimeCoder(VariableCoder):
             variable.data.dtype, np.datetime64
         ) or contains_cftime_datetimes(variable):
             dims, data, attrs, encoding = unpack_for_encoding(variable)
-
+            print("encode_CF_Datetime")
             units = encoding.pop("units", None)
             calendar = encoding.pop("calendar", None)
             (data, units, calendar) = encode_cf_datetime(data, units, calendar)

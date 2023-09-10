@@ -1226,6 +1226,23 @@ def test_roundtrip_datetime64_nanosecond_precision(
     assert_identical(var, decoded_var)
 
 
+def test_roundtrip_datetime64_nanosecond_precision_warning() -> None:
+    # test
+    times = [np.datetime64("1970-01-01T00:01:00", "m"), np.datetime64("NaT"),
+             np.datetime64("1970-01-02T00:01:00", "m")]
+    encoding = dict(_FillValue=20, units="days since 1970-01-10T01:01:00")
+    var = Variable(["time"], times, encoding=encoding)
+    print("starting")
+    print(var.astype(np.int64))
+    with pytest.warns(UserWarning, match="serialized faithfully"):
+        encoded_var = conventions.encode_cf_variable(var)
+    print("ENC:", encoded_var)
+    decoded_var = conventions.decode_cf_variable("foo", encoded_var)
+    print("DEC:", decoded_var.load())
+    assert_identical(var, decoded_var)
+
+
+
 @pytest.mark.parametrize(
     "dtype, fill_value",
     [(np.int64, 20), (np.int64, np.iinfo(np.int64).min), (np.float64, 1e30)],
@@ -1247,3 +1264,22 @@ def test_roundtrip_timedelta64_nanosecond_precision(
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
 
     assert_identical(var, decoded_var)
+
+
+def test_roundtrip_timedelta64_nanosecond_precision_warning() -> None:
+    # test
+    times = [np.datetime64("1970-01-01T00:01:00", "m"), np.datetime64("NaT"),
+             np.datetime64("1970-01-02T00:01:00", "m")]
+    encoding = dict(_FillValue=20, units="days since 1970-01-10T01:01:00")
+    var = Variable(["time"], times, encoding=encoding)
+    print("starting")
+    print(var.astype(np.int64))
+    with pytest.warns(UserWarning, match="serialized faithfully"):
+        encoded_var = conventions.encode_cf_variable(var)
+    print("ENC:", encoded_var)
+    decoded_var = conventions.decode_cf_variable("foo", encoded_var)
+    print("DEC:", decoded_var.load())
+    assert_identical(var, decoded_var)
+
+
+

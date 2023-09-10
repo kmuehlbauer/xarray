@@ -186,6 +186,8 @@ def encode_cf_variable(
         variables.BooleanCoder(),
     ]:
         var = coder.encode(var, name=name)
+        print("VAR:", var)
+        print("VAR-DTYPE:", var.data.dtype)
 
     # TODO(kmuehlbauer): check if ensure_dtype_not_object can be moved to backends:
     var = ensure_dtype_not_object(var, name=name)
