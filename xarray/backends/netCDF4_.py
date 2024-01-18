@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterable
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
+from packaging import version
 
 import numpy as np
 
@@ -370,6 +371,7 @@ class NetCDF4DataStore(WritableCFDataStore):
         lock=None,
         lock_maker=None,
         autoclose=False,
+        auto_complex=False,
     ):
         import netCDF4
 
@@ -401,6 +403,8 @@ class NetCDF4DataStore(WritableCFDataStore):
         kwargs = dict(
             clobber=clobber, diskless=diskless, persist=persist, format=format
         )
+        if version.parse(netCDF4.__version__) >= version.parse("1.7.0"):
+            kwargs.update(auto_complex=auto_complex)
         manager = CachingFileManager(
             netCDF4.Dataset, filename, mode=mode, kwargs=kwargs
         )
@@ -639,6 +643,7 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
         persist=False,
         lock=None,
         autoclose=False,
+        auto_complex=False,
     ) -> Dataset:
         filename_or_obj = _normalize_path(filename_or_obj)
         store = NetCDF4DataStore.open(
@@ -651,6 +656,7 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
             persist=persist,
             lock=lock,
             autoclose=autoclose,
+            auto_complex=auto_complex,
         )
 
         store_entrypoint = StoreBackendEntrypoint()

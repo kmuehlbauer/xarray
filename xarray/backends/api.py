@@ -1101,6 +1101,7 @@ def to_netcdf(
     *,
     multifile: Literal[True],
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> tuple[ArrayWriter, AbstractDataStore]:
     ...
 
@@ -1119,6 +1120,7 @@ def to_netcdf(
     compute: bool = True,
     multifile: Literal[False] = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> bytes:
     ...
 
@@ -1138,6 +1140,7 @@ def to_netcdf(
     compute: Literal[False],
     multifile: Literal[False] = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> Delayed:
     ...
 
@@ -1156,6 +1159,7 @@ def to_netcdf(
     compute: Literal[True] = True,
     multifile: Literal[False] = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> None:
     ...
 
@@ -1175,6 +1179,7 @@ def to_netcdf(
     compute: bool = False,
     multifile: Literal[False] = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> Delayed | None:
     ...
 
@@ -1194,6 +1199,7 @@ def to_netcdf(
     compute: bool = False,
     multifile: bool = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> tuple[ArrayWriter, AbstractDataStore] | Delayed | None:
     ...
 
@@ -1212,6 +1218,7 @@ def to_netcdf(
     compute: bool = False,
     multifile: bool = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> tuple[ArrayWriter, AbstractDataStore] | bytes | Delayed | None:
     ...
 
@@ -1228,6 +1235,7 @@ def to_netcdf(
     compute: bool = True,
     multifile: bool = False,
     invalid_netcdf: bool = False,
+    auto_complex: bool = False,
 ) -> tuple[ArrayWriter, AbstractDataStore] | bytes | Delayed | None:
     """This function creates an appropriate datastore for writing a dataset to
     disk as a netCDF file
@@ -1294,6 +1302,13 @@ def to_netcdf(
         else:
             raise ValueError(
                 f"unrecognized option 'invalid_netcdf' for engine {engine}"
+            )
+    if auto_complex:
+        if engine in ["netcdf4", "h5netcdf"]:
+            kwargs["auto_complex"] = auto_complex
+        else:
+            raise ValueError(
+                f"unrecognized option 'auto_complex' for engine {engine}"
             )
     store = store_open(target, mode, format, group, **kwargs)
 

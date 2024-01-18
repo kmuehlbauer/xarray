@@ -142,6 +142,7 @@ class H5NetCDFStore(WritableCFDataStore):
         decode_vlen_strings=True,
         driver=None,
         driver_kwds=None,
+        auto_complex=None,
     ):
         import h5netcdf
 
@@ -169,6 +170,8 @@ class H5NetCDFStore(WritableCFDataStore):
             kwargs.update(driver_kwds)
         if phony_dims is not None:
             kwargs["phony_dims"] = phony_dims
+        if auto_complex is not None:
+            kwargs["auto_complex"] = auto_complex
 
         if lock is None:
             if mode == "r":
@@ -395,6 +398,7 @@ class H5netcdfBackendEntrypoint(BackendEntrypoint):
         decode_vlen_strings=True,
         driver=None,
         driver_kwds=None,
+        auto_complex=False,
     ) -> Dataset:
         filename_or_obj = _normalize_path(filename_or_obj)
         store = H5NetCDFStore.open(
@@ -407,6 +411,7 @@ class H5netcdfBackendEntrypoint(BackendEntrypoint):
             decode_vlen_strings=decode_vlen_strings,
             driver=driver,
             driver_kwds=driver_kwds,
+            auto_complex=auto_complex,
         )
 
         store_entrypoint = StoreBackendEntrypoint()

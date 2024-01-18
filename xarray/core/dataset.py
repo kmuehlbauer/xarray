@@ -2152,6 +2152,7 @@ class Dataset(
         unlimited_dims: Iterable[Hashable] | None = None,
         compute: bool = True,
         invalid_netcdf: bool = False,
+        auto_complex: bool = False,
     ) -> bytes:
         ...
 
@@ -2169,6 +2170,7 @@ class Dataset(
         *,
         compute: Literal[False],
         invalid_netcdf: bool = False,
+        auto_complex: bool = False,
     ) -> Delayed:
         ...
 
@@ -2185,6 +2187,7 @@ class Dataset(
         unlimited_dims: Iterable[Hashable] | None = None,
         compute: Literal[True] = True,
         invalid_netcdf: bool = False,
+        auto_complex: bool = False,
     ) -> None:
         ...
 
@@ -2202,6 +2205,7 @@ class Dataset(
         unlimited_dims: Iterable[Hashable] | None = None,
         compute: bool = True,
         invalid_netcdf: bool = False,
+        auto_complex: bool = False,
     ) -> Delayed | None:
         ...
 
@@ -2216,6 +2220,7 @@ class Dataset(
         unlimited_dims: Iterable[Hashable] | None = None,
         compute: bool = True,
         invalid_netcdf: bool = False,
+        auto_complex: bool = False,
     ) -> bytes | Delayed | None:
         """Write dataset contents to a netCDF file.
 
@@ -2312,6 +2317,7 @@ class Dataset(
             compute=compute,
             multifile=False,
             invalid_netcdf=invalid_netcdf,
+            auto_complex=auto_complex,
         )
 
     # compute=True (default) returns ZarrStore

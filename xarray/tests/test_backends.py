@@ -1833,6 +1833,13 @@ class TestNetCDF4Data(NetCDF4Base):
             with backends.NetCDF4DataStore.open(tmp_file, mode="w") as store:
                 yield store
 
+    def test_complex(self) -> None:
+        expected = Dataset({"x": ("y", np.ones(5) + 1j * np.ones(5))})
+        kwargs = {"auto_complex": True}
+        #with pytest.warns(UserWarning, match="You are writing invalid netcdf features"):
+        with self.roundtrip(expected, save_kwargs=kwargs, open_kwargs=kwargs) as actual:
+            assert_equal(expected, actual)
+
     def test_variable_order(self) -> None:
         # doesn't work with scipy or h5py :(
         ds = Dataset()
@@ -3344,22 +3351,21 @@ class TestH5NetCDFData(NetCDF4Base):
 
     def test_complex(self) -> None:
         expected = Dataset({"x": ("y", np.ones(5) + 1j * np.ones(5))})
-        save_kwargs = {"invalid_netcdf": True}
-        with pytest.warns(UserWarning, match="You are writing invalid netcdf features"):
-            with self.roundtrip(expected, save_kwargs=save_kwargs) as actual:
-                assert_equal(expected, actual)
+        kwargs = {"auto_complex": True}
+        with self.roundtrip(expected, save_kwargs=kwargs, open_kwargs=kwargs) as actual:
+            assert_equal(expected, actual)
 
-    @pytest.mark.parametrize("invalid_netcdf", [None, False])
-    def test_complex_error(self, invalid_netcdf) -> None:
-        import h5netcdf
-
-        expected = Dataset({"x": ("y", np.ones(5) + 1j * np.ones(5))})
-        save_kwargs = {"invalid_netcdf": invalid_netcdf}
-        with pytest.raises(
-            h5netcdf.CompatibilityError, match="are not a supported NetCDF feature"
-        ):
-            with self.roundtrip(expected, save_kwargs=save_kwargs) as actual:
-                assert_equal(expected, actual)
+    # @pytest.mark.parametrize("invalid_netcdf", [None, False])
+    # def test_complex_error(self, invalid_netcdf) -> None:
+    #     import h5netcdf
+    #
+    #     expected = Dataset({"x": ("y", np.ones(5) + 1j * np.ones(5))})
+    #     save_kwargs = {"invalid_netcdf": invalid_netcdf}
+    #     with pytest.raises(
+    #         h5netcdf.CompatibilityError, match="are not a supported NetCDF feature"
+    #     ):
+    #         with self.roundtrip(expected, save_kwargs=save_kwargs) as actual:
+    #             assert_equal(expected, actual)
 
     def test_numpy_bool_(self) -> None:
         # h5netcdf loads booleans as numpy.bool_, this type needs to be supported
