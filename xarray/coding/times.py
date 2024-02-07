@@ -1004,6 +1004,19 @@ class CFDatetimeCoder(VariableCoder):
         else:
             return variable
 
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+        units = pop_to(attrs, encoding, "units")
+        calendar = pop_to(attrs, encoding, "calendar")
+        dtype = _decode_cf_datetime_dtype(data, units, calendar, self.use_cftime)
+        transform = partial(
+            decode_cf_datetime,
+            units=units,
+            calendar=calendar,
+            use_cftime=self.use_cftime,
+        )
+        data = lazy_elemwise_func(data, transform, dtype)
+        return dims, data, attrs, encoding
+
 
 class CFTimedeltaCoder(VariableCoder):
     def encode(self, variable: Variable, name: T_Name = None) -> Variable:
@@ -1032,3 +1045,10 @@ class CFTimedeltaCoder(VariableCoder):
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
+
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+        units = pop_to(attrs, encoding, "units")
+        transform = partial(decode_cf_timedelta, units=units)
+        dtype = np.dtype("timedelta64[ns]")
+        data = lazy_elemwise_func(data, transform, dtype=dtype)
+        return dims, data, attrs, encoding

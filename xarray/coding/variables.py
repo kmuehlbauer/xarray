@@ -244,6 +244,18 @@ def _is_time_like(units):
         return any(tstr == units for tstr in time_strings)
 
 
+# class CFRangeCoder(VariableCoder):
+#
+#     def encode(self, variable: Variable, name: T_Name = None) -> Variable:
+#         raise NotImplementedError
+#
+#     def decode(self, variable: Variable, name: T_Name = None) -> Variable:
+#         keys = ["valid_min", "valid_max", "valid_range", "actual_range"]
+#         keys_available = [k for k in keys if k in variable.attrs]
+#         if keys_available:
+#             if "actual_range" not in keys_available:
+
+
 class CFMaskCoder(VariableCoder):
     """Mask or unmask fill values according to CF conventions."""
 
@@ -338,6 +350,46 @@ class CFMaskCoder(VariableCoder):
         else:
             return variable
 
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+        raw_fill_values = [
+            pop_to(attrs, encoding, attr, name=name)
+            for attr in ("missing_value", "_FillValue")
+        ]
+        if raw_fill_values:
+            encoded_fill_values = {
+                fv
+                for option in raw_fill_values
+                for fv in np.ravel(option)
+                if not pd.isnull(fv)
+            }
+
+            if len(encoded_fill_values) > 1:
+                warnings.warn(
+                    "variable {!r} has multiple fill values {}, "
+                    "decoding all values to NaN.".format(name, encoded_fill_values),
+                    SerializationWarning,
+                    stacklevel=3,
+                )
+
+            # special case DateTime to properly handle NaT
+            dtype: np.typing.DTypeLike
+            decoded_fill_value: Any
+            if _is_time_like(attrs.get("units")) and data.dtype.kind in "iu":
+                dtype, decoded_fill_value = np.int64, np.iinfo(np.int64).min
+            else:
+                dtype, decoded_fill_value = dtypes.maybe_promote(data.dtype)
+
+            if encoded_fill_values:
+                transform = partial(
+                    _apply_mask,
+                    encoded_fill_values=encoded_fill_values,
+                    decoded_fill_value=decoded_fill_value,
+                    dtype=dtype,
+                )
+                data = lazy_elemwise_func(data, transform, dtype)
+
+        return dims, data, attrs, encoding
+
 
 def _scale_offset_decoding(data, scale_factor, add_offset, dtype: np.typing.DTypeLike):
     data = data.astype(dtype=dtype, copy=True)
@@ -411,6 +463,25 @@ class CFScaleOffsetCoder(VariableCoder):
         else:
             return variable
 
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+
+        scale_factor = pop_to(attrs, encoding, "scale_factor", name=name)
+        add_offset = pop_to(attrs, encoding, "add_offset", name=name)
+        dtype = _choose_float_dtype(data.dtype, "add_offset" in encoding)
+        if np.ndim(scale_factor) > 0:
+            scale_factor = np.asarray(scale_factor).item()
+        if np.ndim(add_offset) > 0:
+            add_offset = np.asarray(add_offset).item()
+        transform = partial(
+            _scale_offset_decoding,
+            scale_factor=scale_factor,
+            add_offset=add_offset,
+            dtype=dtype,
+        )
+        data = lazy_elemwise_func(data, transform, dtype)
+
+        return dims, data, attrs, encoding
+
 
 class UnsignedIntegerCoder(VariableCoder):
     def encode(self, variable: Variable, name: T_Name = None) -> Variable:
@@ -466,6 +537,34 @@ class UnsignedIntegerCoder(VariableCoder):
         else:
             return variable
 
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+        unsigned = pop_to(attrs, encoding, "_Unsigned")
+
+        if data.dtype.kind == "i":
+            if unsigned == "true":
+                unsigned_dtype = np.dtype(f"u{data.dtype.itemsize}")
+                transform = partial(np.asarray, dtype=unsigned_dtype)
+                data = lazy_elemwise_func(data, transform, unsigned_dtype)
+                if "_FillValue" in attrs:
+                    new_fill = unsigned_dtype.type(attrs["_FillValue"])
+                    attrs["_FillValue"] = new_fill
+        elif data.dtype.kind == "u":
+            if unsigned == "false":
+                signed_dtype = np.dtype(f"i{data.dtype.itemsize}")
+                transform = partial(np.asarray, dtype=signed_dtype)
+                data = lazy_elemwise_func(data, transform, signed_dtype)
+                if "_FillValue" in attrs:
+                    new_fill = signed_dtype.type(attrs["_FillValue"])
+                    attrs["_FillValue"] = new_fill
+        else:
+            warnings.warn(
+                f"variable {name!r} has _Unsigned attribute but is not "
+                "of integer type. Ignoring attribute.",
+                SerializationWarning,
+                stacklevel=3,
+            )
+        return dims, data, attrs, encoding
+
 
 class DefaultFillvalueCoder(VariableCoder):
     """Encode default _FillValue if needed."""
@@ -515,6 +614,13 @@ class BooleanCoder(VariableCoder):
         else:
             return variable
 
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+        # overwrite (!) dtype in encoding, and remove from attrs
+        # needed for correct subsequent encoding
+        encoding["dtype"] = attrs.pop("dtype")
+        data = BoolTypeArray(data)
+        return dims, data, attrs, encoding
+
 
 class EndianCoder(VariableCoder):
     """Decode Endianness to native."""
@@ -529,6 +635,10 @@ class EndianCoder(VariableCoder):
             return Variable(dims, data, attrs, encoding, fastpath=True)
         else:
             return variable
+
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+        data = NativeEndiannessArray(data)
+        return dims, data, attrs, encoding
 
 
 class NonStringCoder(VariableCoder):
@@ -575,6 +685,21 @@ class ObjectVLenStringCoder(VariableCoder):
             return variable
         else:
             return variable
+
+    def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
+
+        def _astype(data, dtype):
+            return data.astype(dtype=dtype)
+
+        dtype = encoding["dtype"]
+        transform = partial(
+            _astype,
+            dtype=dtype,
+        )
+        data = lazy_elemwise_func(data, transform, dtype)
+        # data = duck_array_ops.astype(data, encoding["dtype"])
+        # data = data.astype()
+        return dims, data, attrs, encoding
 
 
 class NativeEnumCoder(VariableCoder):

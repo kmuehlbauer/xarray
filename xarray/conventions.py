@@ -203,6 +203,81 @@ def encode_cf_variable(
     return var
 
 
+class VarCoder:
+    """Coder for Variable objects."""
+
+    def _check_decoders_var(self, var: Variable):
+        coders_var = []
+        dtype = var.dtype
+        dims = var.dims
+        attrs = var.attrs
+        encoding = var.encoding
+        if dtype == "S1" and dims:
+            coders_var.append(strings.CharacterArrayCoder)
+        if "_Encoding" in attrs:
+            coders_var.append(strings.EncodedStringCoder)
+        if dtype == object and encoding.get("dtype", False) == str:
+            coders_var.append(variables.ObjectVLenStringCoder)
+        if "_Unsigned" in attrs:
+            coders_var.append(variables.UnsignedIntegerCoder)
+        if "missing_value" in attrs or "_FillValue" in attrs:
+            coders_var.append(variables.CFMaskCoder)
+        if "scale_factor" in attrs or "add_offset" in attrs:
+            coders_var.append(variables.CFScaleOffsetCoder)
+        units = attrs.get("units", None)
+        if isinstance(units, str):
+            if units in times.TIME_UNITS:
+                coders_var.append(times.CFTimedeltaCoder)
+            if "since" in units:
+                coders_var.append(times.CFDatetimeCoder)
+        if not var.dtype.isnative:
+            coders_var.append(variables.EndianCoder)
+        if var.attrs.get("dtype", False) == "bool":
+            coders_var.append(variables.BooleanCoder)
+
+        return coders_var
+
+    def _check_decoders_kwargs(self, **kwargs):
+        coders_kwargs = []
+        if kwargs.get("concat_characters", False):
+            if kwargs.get("stack_char_dim", False):
+                coders_kwargs.append(strings.CharacterArrayCoder)
+            coders_kwargs.append(strings.EncodedStringCoder)
+        coders_kwargs.append(variables.ObjectVLenStringCoder)
+
+        if kwargs.get("mask_and_scale", False):
+            coders_kwargs.extend(
+                [
+                    variables.UnsignedIntegerCoder,
+                    variables.CFMaskCoder,
+                    variables.CFScaleOffsetCoder,
+                ]
+            )
+        if kwargs.get("decode_timedelta", kwargs.get("decode_times", False)):
+            coders_kwargs.append(times.CFTimedeltaCoder)
+        if kwargs.get("decode_times", False):
+            coders_kwargs.append(times.CFDatetimeCoder)
+        if kwargs.get("decode_endianness", False):
+            coders_kwargs.append(variables.EndianCoder)
+        coders_kwargs.append(variables.BooleanCoder)
+        return coders_kwargs
+
+    def decode(self, variable: Variable, name: T_Name = None, **kwargs) -> Variable:
+        coders_kwargs = self._check_decoders_kwargs(**kwargs)
+        coders_var = self._check_decoders_var(variable)
+        coders = [coder for coder in coders_var if coder in coders_kwargs]
+        dims, data, attrs, encoding = variables.unpack_for_decoding(variable)
+        for coder in coders:
+            dims, data, attrs, encoding = coder()._decode(
+                dims, data, attrs, encoding, name=name
+            )
+
+        if not is_duck_dask_array(data):
+            data = indexing.LazilyIndexedArray(data)
+
+        return Variable(dims, data, attrs, encoding=encoding, fastpath=True)
+
+
 def decode_cf_variable(
     name: Hashable,
     var: Variable,
@@ -263,47 +338,58 @@ def decode_cf_variable(
     if _contains_datetime_like_objects(var):
         return var
 
-    original_dtype = var.dtype
+    # original_dtype = var.dtype
+    #
+    # if decode_timedelta is None:
+    #     decode_timedelta = decode_times
+    #
+    # if concat_characters:
+    #     if stack_char_dim:
+    #         var = strings.CharacterArrayCoder().decode(var, name=name)
+    #     var = strings.EncodedStringCoder().decode(var)
+    #
+    # if original_dtype == object:
+    #     var = variables.ObjectVLenStringCoder().decode(var)
+    #     original_dtype = var.dtype
+    #
+    # if mask_and_scale:
+    #     for coder in [
+    #         variables.UnsignedIntegerCoder(),
+    #         variables.CFMaskCoder(),
+    #         variables.CFScaleOffsetCoder(),
+    #     ]:
+    #         var = coder.decode(var, name=name)
+    #
+    # if decode_timedelta:
+    #     var = times.CFTimedeltaCoder().decode(var, name=name)
+    # if decode_times:
+    #     var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
+    #
+    # if decode_endianness and not var.dtype.isnative:
+    #     var = variables.EndianCoder().decode(var)
+    #     original_dtype = var.dtype
 
-    if decode_timedelta is None:
-        decode_timedelta = decode_times
+    # var = variables.BooleanCoder().decode(var)
 
-    if concat_characters:
-        if stack_char_dim:
-            var = strings.CharacterArrayCoder().decode(var, name=name)
-        var = strings.EncodedStringCoder().decode(var)
+    # dimensions, data, attributes, encoding = variables.unpack_for_decoding(var)
 
-    if original_dtype == object:
-        var = variables.ObjectVLenStringCoder().decode(var)
-        original_dtype = var.dtype
+    # encoding.setdefault("dtype", original_dtype)
 
-    if mask_and_scale:
-        for coder in [
-            variables.UnsignedIntegerCoder(),
-            variables.CFMaskCoder(),
-            variables.CFScaleOffsetCoder(),
-        ]:
-            var = coder.decode(var, name=name)
+    # if not is_duck_dask_array(data):
+    #    data = indexing.LazilyIndexedArray(data)
 
-    if decode_timedelta:
-        var = times.CFTimedeltaCoder().decode(var, name=name)
-    if decode_times:
-        var = times.CFDatetimeCoder(use_cftime=use_cftime).decode(var, name=name)
-
-    if decode_endianness and not var.dtype.isnative:
-        var = variables.EndianCoder().decode(var)
-        original_dtype = var.dtype
-
-    var = variables.BooleanCoder().decode(var)
-
-    dimensions, data, attributes, encoding = variables.unpack_for_decoding(var)
-
-    encoding.setdefault("dtype", original_dtype)
-
-    if not is_duck_dask_array(data):
-        data = indexing.LazilyIndexedArray(data)
-
-    return Variable(dimensions, data, attributes, encoding=encoding, fastpath=True)
+    vc = VarCoder()
+    kwargs = dict(
+        concat_characters=concat_characters,
+        mask_and_scale=mask_and_scale,
+        decode_times=decode_times,
+        decode_endianness=decode_endianness,
+        stack_char_dim=stack_char_dim,
+        use_cftime=use_cftime,
+        decode_timedelta=decode_timedelta,
+    )
+    return vc.decode(var, **kwargs)
+    # return Variable(dimensions, data, attributes, encoding=encoding, fastpath=True)
 
 
 def _update_bounds_attributes(variables: T_Variables) -> None:

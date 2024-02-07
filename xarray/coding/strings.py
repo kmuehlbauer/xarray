@@ -84,6 +84,12 @@ class EncodedStringCoder(VariableCoder):
 
         return Variable(dims, data, attrs, encoding)
 
+    def _decode(self, dims, data, attrs, encoding, name: str) -> tuple:
+        string_encoding = pop_to(attrs, encoding, "_Encoding")
+        func = partial(decode_bytes_array, encoding=string_encoding)
+        data = lazy_elemwise_func(data, func, np.dtype(object))
+        return dims, data, attrs, encoding
+
 
 def decode_bytes_array(bytes_array, encoding="utf-8"):
     # This is faster than using np.char.decode() or np.vectorize()
@@ -133,6 +139,12 @@ class CharacterArrayCoder(VariableCoder):
             dims = dims[:-1]
             data = char_to_bytes(data)
         return Variable(dims, data, attrs, encoding)
+
+    def _decode(self, dims, data, attrs, encoding, str) -> tuple:
+        encoding["char_dim_name"] = dims[-1]
+        dims = dims[:-1]
+        data = char_to_bytes(data)
+        return dims, data, attrs, encoding
 
 
 def bytes_to_char(arr):
