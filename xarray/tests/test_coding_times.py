@@ -1069,9 +1069,13 @@ def test_encode_decode_roundtrip_cftime(freq) -> None:
     times = initial_time.append(
         cftime_range("0001", periods=2, freq=freq) + timedelta(days=291000 * 365)
     )
+    print(times)
     variable = Variable(["time"], times)
+    print(variable)
     encoded = conventions.encode_cf_variable(variable)
+    print(encoded)
     decoded = conventions.decode_cf_variable("time", encoded, use_cftime=True)
+    print(decoded.load())
     assert_equal(variable, decoded)
 
 

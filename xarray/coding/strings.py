@@ -140,7 +140,7 @@ class CharacterArrayCoder(VariableCoder):
             data = char_to_bytes(data)
         return Variable(dims, data, attrs, encoding)
 
-    def _decode(self, dims, data, attrs, encoding, str) -> tuple:
+    def _decode(self, dims, data, attrs, encoding, name) -> tuple:
         encoding["char_dim_name"] = dims[-1]
         dims = dims[:-1]
         data = char_to_bytes(data)

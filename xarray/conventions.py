@@ -263,14 +263,25 @@ class VarCoder:
         return coders_kwargs
 
     def decode(self, variable: Variable, name: T_Name = None, **kwargs) -> Variable:
+        original_dtype = variable.dtype
         coders_kwargs = self._check_decoders_kwargs(**kwargs)
         coders_var = self._check_decoders_var(variable)
         coders = [coder for coder in coders_var if coder in coders_kwargs]
         dims, data, attrs, encoding = variables.unpack_for_decoding(variable)
         for coder in coders:
-            dims, data, attrs, encoding = coder()._decode(
+            ckwargs = {}
+            if issubclass(coder, times.CFDatetimeCoder):
+                ckwargs.update(use_cftime=kwargs.get("use_cftime", False))
+            cod = coder(**ckwargs)
+            dims, data, attrs, encoding = cod._decode(
                 dims, data, attrs, encoding, name=name
             )
+            if issubclass(
+                coder, (variables.ObjectVLenStringCoder, variables.EndianCoder)
+            ):
+                original_dtype = data.dtype
+
+        encoding.setdefault("dtype", original_dtype)
 
         if not is_duck_dask_array(data):
             data = indexing.LazilyIndexedArray(data)
@@ -340,8 +351,10 @@ def decode_cf_variable(
 
     # original_dtype = var.dtype
     #
-    # if decode_timedelta is None:
-    #     decode_timedelta = decode_times
+    if decode_timedelta is None:
+        decode_timedelta = decode_times
+
+    print("encoding:", name, var.encoding)
     #
     # if concat_characters:
     #     if stack_char_dim:
@@ -388,7 +401,7 @@ def decode_cf_variable(
         use_cftime=use_cftime,
         decode_timedelta=decode_timedelta,
     )
-    return vc.decode(var, **kwargs)
+    return vc.decode(var, name, **kwargs)
     # return Variable(dimensions, data, attributes, encoding=encoding, fastpath=True)
 
 

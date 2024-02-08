@@ -687,18 +687,10 @@ class ObjectVLenStringCoder(VariableCoder):
             return variable
 
     def _decode(self, dims, data, attrs, encoding, name: T_Name = None) -> tuple:
-
-        def _astype(data, dtype):
-            return data.astype(dtype=dtype)
-
-        dtype = encoding["dtype"]
-        transform = partial(
-            _astype,
-            dtype=dtype,
-        )
-        data = lazy_elemwise_func(data, transform, dtype)
-        # data = duck_array_ops.astype(data, encoding["dtype"])
-        # data = data.astype()
+        # todo: find out how this works without wrapping with Variable
+        variable = Variable(dims, data, attrs, encoding, fastpath=True)
+        variable = variable.astype(variable.encoding["dtype"])
+        dims, data, attrs, encoding = unpack_for_decoding(variable)
         return dims, data, attrs, encoding
 
 

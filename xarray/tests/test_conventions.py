@@ -435,6 +435,7 @@ class TestDecodeCF:
         )
 
         dsc = conventions.decode_cf(ds)
+        print(dsc)
         assert dsc.timedelta.dtype == np.dtype("m8[ns]")
         assert dsc.time.dtype == np.dtype("M8[ns]")
         dsc = conventions.decode_cf(ds, decode_times=False)
