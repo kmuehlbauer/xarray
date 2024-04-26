@@ -11,6 +11,8 @@ from xarray.backends.common import (
 )
 from xarray.core.dataset import Dataset
 
+# from xarray.core.datatree import DataTree
+
 if TYPE_CHECKING:
     import os
     from io import BufferedIOBase
@@ -52,7 +54,6 @@ class StoreBackendEntrypoint(BackendEntrypoint):
             use_cftime=use_cftime,
             decode_timedelta=decode_timedelta,
         )
-
         ds = Dataset(vars, attrs=attrs)
         ds = ds.set_coords(coord_names.intersection(vars))
         ds.encoding = encoding
@@ -100,7 +101,7 @@ class StoreBackendEntrypoint(BackendEntrypoint):
         use_cftime=None,
         decode_timedelta=None,
     ):
-        from datatree import DataTree
+        from xarray.core.datatree import DataTree
 
         def _add_node(store, path, datasets):
             # Create dataset for this node, and add to collector
@@ -121,7 +122,12 @@ class StoreBackendEntrypoint(BackendEntrypoint):
 
             # Recursively add children to collector
             for child_name, child_store in store.get_group_stores().items():
-                datasets = _add_node(child_store, f"{path}{child_name}/", datasets)
+                # print("name, group:", child_name, child_store._group)
+                import os
+
+                child_path = os.path.join(path, child_name)
+                # print("path:", child_path)
+                datasets = _add_node(child_store, child_path, datasets)
 
             return datasets
 

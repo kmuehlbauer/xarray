@@ -239,6 +239,7 @@ def _protect_dataset_variables_inplace(dataset, cache):
             if cache:
                 data = indexing.MemoryCachedArray(data)
             variable.data = data
+    return dataset
 
 
 def _finalize_store(write, store):
@@ -376,7 +377,11 @@ def _datatree_from_backend_datatree(
             **extra_tokens,
         )
 
-    dt.map_over_subtree_inplace((lambda ds: ds.set_close), backend_dt._close)
+    def set_close(ds, closer):
+        ds.set_close(closer)
+        return ds
+
+    dt.map_over_subtree_inplace(set_close, backend_dt._close)
 
     # Ensure source filename always stored in dataset object
     if "source" not in dt.encoding and isinstance(filename_or_obj, (str, os.PathLike)):

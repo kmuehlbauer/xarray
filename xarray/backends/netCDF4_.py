@@ -483,9 +483,10 @@ class NetCDF4DataStore(WritableCFDataStore):
         """Return new NetCDF4DataStore for specified group of this NetCDF4DataStore."""
         if group in self.ds.groups:
             parent_group = self._group if self._group is not None else ""
+            grp = f"{parent_group}/{group}"
             return self.__class__(
                 manager=self._manager,
-                group=f"{parent_group}{group}/",
+                group=grp,
                 mode=self._mode,
                 lock=self.lock,
                 autoclose=self.autoclose,
@@ -672,7 +673,8 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
             lock=lock,
             autoclose=autoclose,
         )
-
+        store_entrypoint = StoreBackendEntrypoint()
+        open_method = getattr(store_entrypoint, open_method)
         with close_on_error(store):
             data_collection = open_method(
                 store,
@@ -752,27 +754,31 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
         lock=None,
         autoclose=False,
     ):
-
-        store_entrypoint = StoreBackendEntrypoint()
-        return self._open_dataset_or_datatree(
-            store_entrypoint.open_datatree,
+        filename_or_obj = _normalize_path(filename_or_obj)
+        store = NetCDF4DataStore.open(
             filename_or_obj,
-            mask_and_scale=mask_and_scale,
-            decode_times=decode_times,
-            concat_characters=concat_characters,
-            decode_coords=decode_coords,
-            drop_variables=drop_variables,
-            use_cftime=use_cftime,
-            decode_timedelta=decode_timedelta,
-            group=group,
             mode=mode,
             format=format,
+            group=group,
             clobber=clobber,
             diskless=diskless,
             persist=persist,
             lock=lock,
             autoclose=autoclose,
         )
+        store_entrypoint = StoreBackendEntrypoint()
+        with close_on_error(store):
+            data_collection = store_entrypoint.open_datatree(
+                store,
+                mask_and_scale=mask_and_scale,
+                decode_times=decode_times,
+                concat_characters=concat_characters,
+                decode_coords=decode_coords,
+                drop_variables=drop_variables,
+                use_cftime=use_cftime,
+                decode_timedelta=decode_timedelta,
+            )
+        return data_collection
 
 
 BACKEND_ENTRYPOINTS["netcdf4"] = ("netCDF4", NetCDF4BackendEntrypoint)
