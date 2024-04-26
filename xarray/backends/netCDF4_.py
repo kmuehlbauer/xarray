@@ -16,7 +16,6 @@ from xarray.backends.common import (
     BackendEntrypoint,
     WritableCFDataStore,
     _normalize_path,
-    _open_datatree_netcdf,
     find_root_and_group,
     robust_getitem,
 )
@@ -45,7 +44,6 @@ if TYPE_CHECKING:
 
     from xarray.backends.common import AbstractDataStore
     from xarray.core.dataset import Dataset
-    from xarray.core.datatree import DataTree
 
 # This lookup table maps from dtype.byteorder to a readable endian
 # string used by netCDF4.
@@ -476,6 +474,25 @@ class NetCDF4DataStore(WritableCFDataStore):
             }
         }
 
+    def get_group_stores(self):
+        return FrozenDict(
+            (group_name, self.select_group(group_name)) for group_name in self.ds.groups
+        )
+
+    def select_group(self, group):
+        """Return new NetCDF4DataStore for specified group of this NetCDF4DataStore."""
+        if group in self.ds.groups:
+            parent_group = self._group if self._group is not None else ""
+            return self.__class__(
+                manager=self._manager,
+                group=f"{parent_group}{group}/",
+                mode=self._mode,
+                lock=self.lock,
+                autoclose=self.autoclose,
+            )
+        else:
+            raise KeyError(group)
+
     def set_dimension(self, name, length, is_unlimited=False):
         _ensure_no_forward_slash_in_name(name)
         dim_length = length if not is_unlimited else None
@@ -622,6 +639,53 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
 
         return False
 
+    def _open_dataset_or_datatree(
+        self,
+        open_method,
+        filename_or_obj,
+        mask_and_scale=True,
+        decode_times=True,
+        concat_characters=True,
+        decode_coords=True,
+        drop_variables=None,
+        use_cftime=None,
+        decode_timedelta=None,
+        group=None,
+        mode="r",
+        format="NETCDF4",
+        clobber=True,
+        diskless=False,
+        persist=False,
+        lock=None,
+        autoclose=False,
+    ):
+
+        filename_or_obj = _normalize_path(filename_or_obj)
+        store = NetCDF4DataStore.open(
+            filename_or_obj,
+            mode=mode,
+            format=format,
+            group=group,
+            clobber=clobber,
+            diskless=diskless,
+            persist=persist,
+            lock=lock,
+            autoclose=autoclose,
+        )
+
+        with close_on_error(store):
+            data_collection = open_method(
+                store,
+                mask_and_scale=mask_and_scale,
+                decode_times=decode_times,
+                concat_characters=concat_characters,
+                decode_coords=decode_coords,
+                drop_variables=drop_variables,
+                use_cftime=use_cftime,
+                decode_timedelta=decode_timedelta,
+            )
+        return data_collection
+
     def open_dataset(  # type: ignore[override]  # allow LSP violation, not supporting **kwargs
         self,
         filename_or_obj: str | os.PathLike[Any] | BufferedIOBase | AbstractDataStore,
@@ -671,12 +735,44 @@ class NetCDF4BackendEntrypoint(BackendEntrypoint):
 
     def open_datatree(
         self,
-        filename_or_obj: str | os.PathLike[Any] | BufferedIOBase | AbstractDataStore,
-        **kwargs,
-    ) -> DataTree:
-        from netCDF4 import Dataset as ncDataset
+        filename_or_obj,
+        mask_and_scale=True,
+        decode_times=True,
+        concat_characters=True,
+        decode_coords=True,
+        drop_variables=None,
+        use_cftime=None,
+        decode_timedelta=None,
+        group=None,
+        mode="r",
+        format="NETCDF4",
+        clobber=True,
+        diskless=False,
+        persist=False,
+        lock=None,
+        autoclose=False,
+    ):
 
-        return _open_datatree_netcdf(ncDataset, filename_or_obj, **kwargs)
+        store_entrypoint = StoreBackendEntrypoint()
+        return self._open_dataset_or_datatree(
+            store_entrypoint.open_datatree,
+            filename_or_obj,
+            mask_and_scale=mask_and_scale,
+            decode_times=decode_times,
+            concat_characters=concat_characters,
+            decode_coords=decode_coords,
+            drop_variables=drop_variables,
+            use_cftime=use_cftime,
+            decode_timedelta=decode_timedelta,
+            group=group,
+            mode=mode,
+            format=format,
+            clobber=clobber,
+            diskless=diskless,
+            persist=persist,
+            lock=lock,
+            autoclose=autoclose,
+        )
 
 
 BACKEND_ENTRYPOINTS["netcdf4"] = ("netCDF4", NetCDF4BackendEntrypoint)

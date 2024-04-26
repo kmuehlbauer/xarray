@@ -223,6 +223,9 @@ class AbstractDataStore:
     def get_variables(self):  # pragma: no cover
         raise NotImplementedError()
 
+    def get_group_stores(self):  # pragma: no cover
+        raise NotImplementedError()
+
     def get_encoding(self):
         return {}
 
@@ -505,12 +508,21 @@ class BackendEntrypoint:
       implementation of this method is not mandatory.  For more details see
       <reference to open_datatree documentation>.
 
+    Optionally, it shall implement:
+
+    - ``open_datatree`` method: it shall implement reading from file, variables
+      decoding and it returns an instance of :py:class:`~datatree.DataTree`.
+      It shall take in input at least ``filename_or_obj`` argument and
+      ``drop_variables`` keyword argument.
+      For more details see TODO.
+
     Attributes
     ----------
 
     open_dataset_parameters : tuple, default: None
         A list of ``open_dataset`` method parameters.
         The setting of this attribute is not mandatory.
+        TODO should datatree have a separate method, or share these parameters?
     description : str, default: ""
         A short string describing the engine.
         The setting of this attribute is not mandatory.
@@ -544,6 +556,18 @@ class BackendEntrypoint:
 
         raise NotImplementedError()
 
+    def open_datatree(
+        self,
+        filename_or_obj: str | os.PathLike[Any] | BufferedIOBase | AbstractDataStore,
+        drop_variables: str | Iterable[str] | None = None,
+        **kwargs: Any,
+    ):
+        """
+        Backend open_dataset method used by Xarray in :py:func:`~xarray.open_dataset`.
+        """
+
+        raise NotImplementedError
+
     def guess_can_open(
         self,
         filename_or_obj: str | os.PathLike[Any] | BufferedIOBase | AbstractDataStore,
@@ -554,16 +578,16 @@ class BackendEntrypoint:
 
         return False
 
-    def open_datatree(
-        self,
-        filename_or_obj: str | os.PathLike[Any] | BufferedIOBase | AbstractDataStore,
-        **kwargs: Any,
-    ) -> DataTree:
-        """
-        Backend open_datatree method used by Xarray in :py:func:`~xarray.open_datatree`.
-        """
-
-        raise NotImplementedError()
+    # def open_datatree(
+    #     self,
+    #     filename_or_obj: str | os.PathLike[Any] | BufferedIOBase | AbstractDataStore,
+    #     **kwargs: Any,
+    # ) -> DataTree:
+    #     """
+    #     Backend open_datatree method used by Xarray in :py:func:`~xarray.open_datatree`.
+    #     """
+    #
+    #     raise NotImplementedError()
 
 
 # mapping of engine name to (module name, BackendEntrypoint Class)
