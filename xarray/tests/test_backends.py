@@ -85,6 +85,8 @@ from xarray.tests.test_coding_times import (
     _ALL_CALENDARS,
     _NON_STANDARD_CALENDARS,
     _STANDARD_CALENDARS,
+    _all_cftime_date_types,
+    cftime_to_nptime,
 )
 from xarray.tests.test_dataset import (
     create_append_string_length_mismatch_test_data,
@@ -400,14 +402,25 @@ class DatasetIOBase:
             actual_dtype = actual.variables[k].dtype
             # TODO: check expected behavior for string dtypes more carefully
             string_kinds = {"O", "S", "U"}
-            assert expected_dtype == actual_dtype or (
-                expected_dtype.kind in string_kinds
-                and actual_dtype.kind in string_kinds
+            # TODO: roundtrip might turn time dtype into more relaxed resolution
+            time_kinds = {"M", "m"}
+            assert (
+                expected_dtype == actual_dtype
+                or (
+                    expected_dtype.kind in string_kinds
+                    and actual_dtype.kind in string_kinds
+                )
+                or (
+                    expected_dtype.kind in time_kinds
+                    and actual_dtype.kind in time_kinds
+                )
             )
 
     def test_roundtrip_test_data(self) -> None:
         expected = create_test_data()
+        print("1:", expected)
         with self.roundtrip(expected) as actual:
+            print("2:", actual)
             self.check_dtypes_roundtripped(expected, actual)
             assert_identical(expected, actual)
 
@@ -564,39 +577,46 @@ class DatasetIOBase:
             assert actual.t0.encoding["units"] == "days since 1950-01-01"
 
     @requires_cftime
-    def test_roundtrip_cftime_datetime_data(self) -> None:
-        from xarray.tests.test_coding_times import _all_cftime_date_types
-
-        date_types = _all_cftime_date_types()
-        for date_type in date_types.values():
-            times = [date_type(1, 1, 1), date_type(1, 1, 2)]
-            expected = Dataset({"t": ("t", times), "t0": times[0]})
-            kwargs = {"encoding": {"t0": {"units": "days since 0001-01-01"}}}
-            expected_decoded_t = np.array(times)
-            expected_decoded_t0 = np.array([date_type(1, 1, 1)])
-            expected_calendar = times[0].calendar
-
-            with warnings.catch_warnings():
-                if expected_calendar in {"proleptic_gregorian", "standard"}:
-                    warnings.filterwarnings("ignore", "Unable to decode time axis")
-
-                with self.roundtrip(expected, save_kwargs=kwargs) as actual:
-                    abs_diff = abs(actual.t.values - expected_decoded_t)
-                    assert (abs_diff <= np.timedelta64(1, "s")).all()
-                    assert (
-                        actual.t.encoding["units"]
-                        == "days since 0001-01-01 00:00:00.000000"
-                    )
-                    assert actual.t.encoding["calendar"] == expected_calendar
-
-                    abs_diff = abs(actual.t0.values - expected_decoded_t0)
-                    assert (abs_diff <= np.timedelta64(1, "s")).all()
-                    assert actual.t0.encoding["units"] == "days since 0001-01-01"
-                    assert actual.t.encoding["calendar"] == expected_calendar
+    @pytest.mark.parametrize("date_type", _all_cftime_date_types().values())
+    def test_roundtrip_cftime_datetime_data(self, date_type) -> None:
+        times = [date_type(1, 1, 1), date_type(1, 1, 2)]
+        expected = Dataset({"t": ("t", times), "t0": times[0]})
+        kwargs = {"encoding": {"t0": {"units": "days since 0001-01-01"}}}
+        expected_decoded_t = np.array(times)
+        expected_decoded_t0 = np.array([date_type(1, 1, 1)])
+        expected_calendar = times[0].calendar
+        with warnings.catch_warnings():
+            if expected_calendar in {"proleptic_gregorian", "standard"}:
+                warnings.filterwarnings("ignore", "Unable to decode time axis")
+            with self.roundtrip(expected, save_kwargs=kwargs) as actual:
+                if not np.issubdtype(actual.t, object):
+                    expected_decoded_t = cftime_to_nptime(expected_decoded_t)
+                    expected_decoded_t0 = cftime_to_nptime(expected_decoded_t0)
+                abs_diff = abs(actual.t.values - expected_decoded_t)
+                assert (abs_diff <= np.timedelta64(1, "s")).all()
+                assert (
+                    actual.t.encoding["units"]
+                    == "days since 0001-01-01 00:00:00.000000"
+                )
+                assert actual.t.encoding["calendar"] == expected_calendar
+                abs_diff = abs(actual.t0.values - expected_decoded_t0)
+                assert (abs_diff <= np.timedelta64(1, "s")).all()
+                assert actual.t0.encoding["units"] == "days since 0001-01-01"
+                assert actual.t.encoding["calendar"] == expected_calendar
 
     def test_roundtrip_timedelta_data(self) -> None:
-        time_deltas = pd.to_timedelta(["1h", "2h", "NaT"])  # type: ignore[arg-type, unused-ignore]
-        expected = Dataset({"td": ("td", time_deltas), "td0": time_deltas[0]})
+        # todo: roundtripping with relaxed non nanosecond resolution needs default
+        unit = "s"
+        # pd.to_timedelta always return ns resolution for string inputs
+        # so we decide for one unit using .as_unit
+        time_deltas = pd.to_timedelta(["1h", "2h", "NaT"]).as_unit(unit)  # type: ignore[arg-type, unused-ignore]
+        expected = Dataset(
+            {
+                "td": ("td", time_deltas),
+                "td0": time_deltas[0],
+            }
+        )
+
         with self.roundtrip(expected) as actual:
             assert_identical(expected, actual)
 
@@ -1580,7 +1600,9 @@ class NetCDF4Base(NetCDFBase):
 
             expected = Dataset()
 
-            time = pd.date_range("1999-01-05", periods=10)
+            # non nanosecond relaxing
+            unit = "s"
+            time = pd.date_range("1999-01-05", periods=10).as_unit(unit)
             encoding = {"units": units, "dtype": np.dtype("int32")}
             expected["time"] = ("time", time, {}, encoding)
 
@@ -5339,7 +5361,7 @@ def test_use_cftime_standard_calendar_default_in_range(calendar) -> None:
 @pytest.mark.parametrize("calendar", _STANDARD_CALENDARS)
 @pytest.mark.parametrize("units_year", [1500, 2500])
 def test_use_cftime_standard_calendar_default_out_of_range(
-    calendar, units_year
+    calendar, units_year, recwarn
 ) -> None:
     import cftime
 
@@ -5360,10 +5382,16 @@ def test_use_cftime_standard_calendar_default_out_of_range(
 
     with create_tmp_file() as tmp_file:
         original.to_netcdf(tmp_file)
-        with pytest.warns(SerializationWarning):
-            with open_dataset(tmp_file) as ds:
-                assert_identical(expected_x, ds.x)
-                assert_identical(expected_time, ds.time)
+        expected_warnings = 0
+        if calendar != "proleptic_gregorian":
+            expected_warnings = 4
+            wtype = SerializationWarning
+        with open_dataset(tmp_file) as ds:
+            assert_identical(expected_x, ds.x)
+            assert_identical(expected_time, ds.time)
+            if expected_warnings:
+                assert len(recwarn) == expected_warnings
+                assert recwarn[0].category == wtype
 
 
 @requires_cftime
@@ -5442,8 +5470,11 @@ def test_use_cftime_false_standard_calendar_out_of_range(calendar, units_year) -
 
     with create_tmp_file() as tmp_file:
         original.to_netcdf(tmp_file)
-        with pytest.raises((OutOfBoundsDatetime, ValueError)):
+        if calendar == "proleptic_gregorian":
             open_dataset(tmp_file, use_cftime=False)
+        else:
+            with pytest.raises((OutOfBoundsDatetime, ValueError)):
+                open_dataset(tmp_file, use_cftime=False)
 
 
 @requires_scipy_or_netCDF4
@@ -5657,6 +5688,7 @@ def _check_guess_can_open_and_open(entrypoint, obj, engine, expected):
 def test_netcdf4_entrypoint(tmp_path: Path) -> None:
     entrypoint = NetCDF4BackendEntrypoint()
     ds = create_test_data()
+    print(ds)
 
     path = tmp_path / "foo"
     ds.to_netcdf(path, format="NETCDF3_CLASSIC")

@@ -664,6 +664,8 @@ class CFTimeIndex(pd.Index):
                 RuntimeWarning,
                 stacklevel=2,
             )
+        print(nptimes)
+        print(pd.DatetimeIndex(nptimes))
         return pd.DatetimeIndex(nptimes)
 
     def strftime(self, date_format):

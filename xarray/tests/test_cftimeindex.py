@@ -1159,14 +1159,16 @@ def test_strftime_of_cftime_array(calendar):
 @pytest.mark.parametrize("unsafe", [False, True])
 def test_to_datetimeindex(calendar, unsafe):
     index = xr.cftime_range("2000", periods=5, calendar=calendar)
-    expected = pd.date_range("2000", periods=5)
+    expected = pd.date_range("2000", periods=5, unit="us")
+    print("1:", expected)
 
     if calendar in _NON_STANDARD_CALENDARS and not unsafe:
-        with pytest.warns(RuntimeWarning, match="non-standard"):
+        msg = "Converting a CFTimeIndex with dates from a non-standard calendar"
+        with pytest.warns(RuntimeWarning, match=msg):
             result = index.to_datetimeindex()
     else:
         result = index.to_datetimeindex(unsafe=unsafe)
-
+    print("2:", result)
     assert result.equals(expected)
     np.testing.assert_array_equal(result, expected)
     assert isinstance(result, pd.DatetimeIndex)
@@ -1174,17 +1176,28 @@ def test_to_datetimeindex(calendar, unsafe):
 
 @requires_cftime
 @pytest.mark.parametrize("calendar", _ALL_CALENDARS)
-def test_to_datetimeindex_out_of_range(calendar):
+def test_to_datetimeindex_out_of_range(calendar, recwarn):
     index = xr.cftime_range("0001", periods=5, calendar=calendar)
-    with pytest.raises(ValueError, match="0001"):
-        index.to_datetimeindex()
+    print(index)
+    expected_warnings = 0
+    if calendar in _NON_STANDARD_CALENDARS:
+        expected_warnings = 1
+        expected_msg = (
+            "Converting a CFTimeIndex with dates from a non-standard calendar"
+        )
+
+    # with pytest.raises(ValueError, match="0001"):
+    index.to_datetimeindex()
+    if expected_warnings:
+        assert len(recwarn) == expected_warnings
+        assert str(recwarn[0].message).startswith(expected_msg)
 
 
 @requires_cftime
 @pytest.mark.parametrize("calendar", ["all_leap", "360_day"])
 def test_to_datetimeindex_feb_29(calendar):
     index = xr.cftime_range("2001-02-28", periods=2, calendar=calendar)
-    with pytest.raises(ValueError, match="29"):
+    with pytest.raises(ValueError, match="day is out of range for month"):
         index.to_datetimeindex()
 
 
@@ -1199,10 +1212,14 @@ def test_multiindex():
 @pytest.mark.parametrize("freq", ["3663s", "33min", "2h"])
 @pytest.mark.parametrize("method", ["floor", "ceil", "round"])
 def test_rounding_methods_against_datetimeindex(freq, method):
-    expected = pd.date_range("2000-01-02T01:03:51", periods=10, freq="1777s")
+    # due to moving to non-nanosecond resolution
+    unit = "us"
+    expected = pd.date_range("2000-01-02T01:03:51", periods=10, freq="1777s", unit=unit)
     expected = getattr(expected, method)(freq)
     result = xr.cftime_range("2000-01-02T01:03:51", periods=10, freq="1777s")
     result = getattr(result, method)(freq).to_datetimeindex()
+    print("1:", expected)
+    print("2:", result)
     assert result.equals(expected)
 
 

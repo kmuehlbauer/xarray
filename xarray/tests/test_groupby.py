@@ -2128,11 +2128,14 @@ class TestDataArrayResample:
     def test_upsample_interpolate_bug_2197(self) -> None:
         dates = pd.date_range("2007-02-01", "2007-03-01", freq="D")
         da = xr.DataArray(np.arange(len(dates)), [("time", dates)])
+        print("SRC", da)
         result = da.resample(time="ME").interpolate("linear")
         expected_times = np.array(
             [np.datetime64("2007-02-28"), np.datetime64("2007-03-31")]
-        )
+        ).astype("=M8[ns]")
         expected = xr.DataArray([27.0, np.nan], [("time", expected_times)])
+        print("RES", result)
+        print("EX", expected)
         assert_equal(result, expected)
 
     @requires_scipy

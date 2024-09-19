@@ -199,6 +199,7 @@ def _maybe_wrap_data(data):
 
 
 def _as_nanosecond_precision(data):
+    return data
     dtype = data.dtype
     non_ns_datetime64 = (
         dtype.kind == "M"
@@ -288,7 +289,6 @@ def as_compatible_data(
         return cast("T_DuckArray", data._variable._data)
 
     if isinstance(data, NON_NUMPY_SUPPORTED_ARRAY_TYPES):
-        data = _possibly_convert_datetime_or_timedelta_index(data)
         return cast("T_DuckArray", _maybe_wrap_data(data))
 
     if isinstance(data, tuple):
@@ -296,8 +296,14 @@ def as_compatible_data(
 
     if isinstance(data, pd.Timestamp):
         # TODO: convert, handle datetime objects, too
-        data = np.datetime64(data.value, "ns")
+        # non nanosecond relaxing
+        data = data.to_numpy()
 
+    if isinstance(data, pd.Timedelta):
+        # non nanosecond relaxing
+        data = data.to_numpy()
+
+    # todo: check, if this can be relaxed, too
     if isinstance(data, timedelta):
         data = np.timedelta64(getattr(data, "value", data), "ns")
 
@@ -343,9 +349,9 @@ def _as_array_or_item(data):
     data = np.asarray(data)
     if data.ndim == 0:
         if data.dtype.kind == "M":
-            data = np.datetime64(data, "ns")
+            data = np.datetime64(data)  # , "ns")
         elif data.dtype.kind == "m":
-            data = np.timedelta64(data, "ns")
+            data = np.timedelta64(data)  # , "ns")
     return data
 
 
