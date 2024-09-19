@@ -263,6 +263,7 @@ def _decode_datetime_with_pandas(
     elif flat_num_dates.dtype.kind == "u":
         flat_num_dates = flat_num_dates.astype(np.uint64)
 
+    print("QQ", flat_num_dates)
     time_units, ref_date_str = _unpack_netcdf_time_units(units)
     time_units = _netcdf_to_numpy_timeunit(time_units)
     try:
@@ -273,6 +274,8 @@ def _decode_datetime_with_pandas(
         # ValueError is raised by pd.Timestamp for non-ISO timestamp
         # strings, in which case we fall back to using cftime
         raise OutOfBoundsDatetime from err
+
+    print("ZZ", time_units, ref_date)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "invalid value encountered", RuntimeWarning)
@@ -291,21 +294,29 @@ def _decode_datetime_with_pandas(
         flat_num_dates = flat_num_dates.astype(np.int64)
     elif flat_num_dates.dtype.kind in "f":
         flat_num_dates = flat_num_dates.astype(np.float64)
-
+    print("QQ2", flat_num_dates)
     # Cast input ordinals to integers of nanoseconds because pd.to_timedelta
     # works much faster when dealing with integers (GH 1399).
     # properly handle NaN/NaT to prevent casting NaN to int
     nan = np.isnan(flat_num_dates) | (flat_num_dates == np.iinfo(np.int64).min)
-    flat_num_dates = flat_num_dates * _NS_PER_TIME_DELTA[time_units]
+    # flat_num_dates = flat_num_dates * _NS_PER_TIME_DELTA[time_units]
     flat_num_dates_ns_int = np.zeros_like(flat_num_dates, dtype=np.int64)
+    print("QQ3", flat_num_dates_ns_int)
     flat_num_dates_ns_int[nan] = np.iinfo(np.int64).min
     flat_num_dates_ns_int[~nan] = flat_num_dates[~nan].astype(np.int64)
-
+    print("QQ4", flat_num_dates_ns_int)
     # Use pd.to_timedelta to safely cast integer values to timedeltas,
     # and add those to a Timestamp to safely produce a DatetimeIndex.  This
     # ensures that we do not encounter integer overflow at any point in the
     # process without raising OutOfBoundsDatetime.
-    return (pd.to_timedelta(flat_num_dates_ns_int, "ns") + ref_date).values
+    # return (pd.to_timedelta(flat_num_dates_ns_int, "ns") + ref_date).values
+    print("XXX", time_units, ref_date)
+    print(flat_num_dates_ns_int)
+    tdelta = pd.to_timedelta(flat_num_dates_ns_int, unit=time_units)
+    print(tdelta)
+    print((tdelta + ref_date).values)
+    # return (pd.to_timedelta(flat_num_dates_ns_int, time_units) + ref_date).values
+    return (tdelta + ref_date).values
 
 
 def decode_cf_datetime(
@@ -337,7 +348,7 @@ def decode_cf_datetime(
             dates = _decode_datetime_with_cftime(
                 flat_num_dates.astype(float), units, calendar
             )
-
+            print("EXCEPTION!!!!")
             if (
                 dates[np.nanargmin(num_dates)].year < 1678
                 or dates[np.nanargmax(num_dates)].year >= 2262
@@ -364,13 +375,13 @@ def decode_cf_datetime(
 
 def to_timedelta_unboxed(value, **kwargs):
     result = pd.to_timedelta(value, **kwargs).to_numpy()
-    assert result.dtype == "timedelta64[ns]"
+    # assert result.dtype == "timedelta64[ns]"
     return result
 
 
 def to_datetime_unboxed(value, **kwargs):
     result = pd.to_datetime(value, **kwargs).to_numpy()
-    assert result.dtype == "datetime64[ns]"
+    # assert result.dtype == "datetime64[ns]"
     return result
 
 
@@ -440,7 +451,10 @@ def infer_datetime_units(dates) -> str:
     unique time deltas in `dates`)
     """
     dates = ravel(np.asarray(dates))
-    if np.asarray(dates).dtype == "datetime64[ns]":
+    print("infer", dates.dtype)
+    if np.issubdtype(
+        dates.dtype, np.datetime64
+    ):  # np.asarray(dates).dtype == "datetime64[ns]":
         dates = to_datetime_unboxed(dates)
         dates = dates[pd.notnull(dates)]
         reference_date = dates[0] if len(dates) > 0 else "1970-01-01"
@@ -744,7 +758,7 @@ def _eagerly_encode_cf_datetime(
     dates = asarray(dates)
 
     data_units = infer_datetime_units(dates)
-
+    print("enc0", data_units)
     if units is None:
         units = data_units
     else:
@@ -757,15 +771,18 @@ def _eagerly_encode_cf_datetime(
         if not _is_standard_calendar(calendar) or dates.dtype.kind == "O":
             # parse with cftime instead
             raise OutOfBoundsDatetime
-        assert dates.dtype == "datetime64[ns]"
+        # assert dates.dtype == "datetime64[ns]"
 
         time_units, ref_date = _unpack_time_units_and_ref_date(units)
         time_delta = _time_units_to_timedelta64(time_units)
+        print("enc2", time_units, time_delta)
 
         # Wrap the dates in a DatetimeIndex to do the subtraction to ensure
         # an OverflowError is raised if the ref_date is too far away from
         # dates to be encoded (GH 2272).
+        print(dates)
         dates_as_index = pd.DatetimeIndex(ravel(dates))
+        print(dates_as_index)
         time_deltas = dates_as_index - ref_date
 
         # retrieve needed units to faithfully encode to int64
@@ -886,12 +903,14 @@ def _eagerly_encode_cf_timedelta(
     allow_units_modification: bool = True,
 ) -> tuple[T_DuckArray, str]:
     data_units = infer_timedelta_units(timedeltas)
-
+    print("enc0", data_units)
     if units is None:
         units = data_units
 
     time_delta = _time_units_to_timedelta64(units)
     time_deltas = pd.TimedeltaIndex(ravel(timedeltas))
+
+    print("enc1", time_delta, time_deltas)
 
     # retrieve needed units to faithfully encode to int64
     needed_units = data_units
@@ -998,6 +1017,7 @@ class CFDatetimeCoder(VariableCoder):
 
             units = pop_to(attrs, encoding, "units")
             calendar = pop_to(attrs, encoding, "calendar")
+            print("decode:", units, calendar)
             dtype = _decode_cf_datetime_dtype(data, units, calendar, self.use_cftime)
             transform = partial(
                 decode_cf_datetime,

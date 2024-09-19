@@ -1121,10 +1121,10 @@ def test_decode_encode_roundtrip_with_non_lowercase_letters(calendar) -> None:
 @requires_cftime
 def test_should_cftime_be_used_source_outside_range():
     src = cftime_range("1000-01-01", periods=100, freq="MS", calendar="noleap")
-    with pytest.raises(
-        ValueError, match="Source time range is not valid for numpy datetimes."
-    ):
-        _should_cftime_be_used(src, "standard", False)
+    # with pytest.raises(
+    #    ValueError, match="Source time range is not valid for numpy datetimes."
+    # ):
+    assert not _should_cftime_be_used(src, "standard", False)
 
 
 @requires_cftime
@@ -1266,9 +1266,10 @@ def test_roundtrip_datetime64_nanosecond_precision(
         encoding = {}
 
     var = Variable(["time"], times, encoding=encoding)
-    assert var.dtype == np.dtype("=M8[ns]")
-
+    assert var.dtype == np.dtype(f"=M8[{timeunit}]")
+    print(var.load())
     encoded_var = conventions.encode_cf_variable(var)
+    print(encoded_var.load())
     assert (
         encoded_var.attrs["units"]
         == f"{_numpy_to_netcdf_timeunit(timeunit)} since 1970-01-01 00:00:00"
@@ -1277,7 +1278,8 @@ def test_roundtrip_datetime64_nanosecond_precision(
     assert encoded_var.data.dtype == dtype
 
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
-    assert decoded_var.dtype == np.dtype("=M8[ns]")
+    print(decoded_var.load())
+    assert decoded_var.dtype == np.dtype(f"=M8[{timeunit}]")
     assert (
         decoded_var.encoding["units"]
         == f"{_numpy_to_netcdf_timeunit(timeunit)} since 1970-01-01 00:00:00"

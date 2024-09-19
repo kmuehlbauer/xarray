@@ -199,6 +199,7 @@ def _maybe_wrap_data(data):
 
 
 def _as_nanosecond_precision(data):
+    return data
     dtype = data.dtype
     non_ns_datetime64 = (
         dtype.kind == "M"

@@ -80,6 +80,6 @@ def nanosecond_precision_timestamp(*args, **kwargs) -> pd.Timestamp:
     #7493.
     """
     if Version(pd.__version__) >= Version("2.0.0"):
-        return pd.Timestamp(*args, **kwargs).as_unit("ns")
+        return pd.Timestamp(*args, **kwargs)  # .as_unit("ns")
     else:
         return pd.Timestamp(*args, **kwargs)
