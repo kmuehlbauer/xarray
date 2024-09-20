@@ -296,6 +296,7 @@ def _decode_datetime_with_pandas(
     time_units, ref_date_str = _unpack_netcdf_time_units(units)
     time_delta = _time_units_to_timedelta64(time_units)
     time_units = _netcdf_to_numpy_timeunit(time_units)
+    print("QQ2", time_units, ref_date_str, time_delta)
     # ref_date = np.datetime64(nanosecond_precision_timestamp(ref_date_str)
     # ref_epoch = _NS_PER_TIME_DELTA[time_units]
     # print(ref_delta, time_delta)
@@ -340,7 +341,12 @@ def _decode_datetime_with_pandas(
     print(comp)
     print(_k, v)
     k = _netcdf_to_numpy_timeunit(_k)
-    print(k)
+    diff_delta = _unit_timedelta_numpy(_k)
+    print(
+        k,
+        _unit_timedelta_numpy(_k),
+        _unit_timedelta_numpy(_numpy_to_netcdf_timeunit(time_units)),
+    )
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "invalid value encountered", RuntimeWarning)
@@ -386,7 +392,8 @@ def _decode_datetime_with_pandas(
     print((tdelta + ref_date).values)  # .astype(f"=M8[{time_units}]"))
     print((tdelta + ref_date).values.astype(f"=M8[{time_units}]"))
     # return (pd.to_timedelta(flat_num_dates_ns_int, time_units) + ref_date).values
-    return (tdelta + ref_date).values.astype(f"=M8[{k}]")
+    final_units = k if diff_delta < time_delta else time_units
+    return (tdelta + ref_date).values.astype(f"=M8[{final_units}]")
 
 
 def decode_cf_datetime(
@@ -444,8 +451,11 @@ def decode_cf_datetime(
 
 
 def to_timedelta_unboxed(value, **kwargs):
-    result = pd.to_timedelta(value, **kwargs).to_numpy()
-    # assert result.dtype == "timedelta64[ns]"
+    unit = kwargs.get("unit", "ns")
+    print("timedelta->unboxed:", kwargs, value, unit)
+    num = pd.to_timedelta(value, **kwargs).to_numpy()
+    print("timedelta->unboxed:", num, num.dtype)
+    result = num.astype(f"=m8[{unit}]")
     return result
 
 
@@ -461,7 +471,9 @@ def decode_cf_timedelta(num_timedeltas, units: str) -> np.ndarray:
     """
     num_timedeltas = np.asarray(num_timedeltas)
     units = _netcdf_to_numpy_timeunit(units)
+    print("timedelta->dec0:", num_timedeltas, units)
     result = to_timedelta_unboxed(ravel(num_timedeltas), unit=units)
+    print("timedelta->dec2:", result, result.dtype)
     return reshape(result, num_timedeltas.shape)
 
 
@@ -844,7 +856,7 @@ def _eagerly_encode_cf_datetime(
     dates = asarray(dates)
 
     data_units = infer_datetime_units(dates)
-    print("enc0", data_units)
+    print("datetime64->enc0", units, data_units, dtype)
     if units is None:
         units = data_units
     else:
@@ -852,6 +864,8 @@ def _eagerly_encode_cf_datetime(
 
     if calendar is None:
         calendar = infer_calendar_name(dates)
+
+    print("datetime64->enc->calendar:", calendar, _is_standard_calendar(calendar))
 
     try:
         if not _is_standard_calendar(calendar) or dates.dtype.kind == "O":
@@ -862,7 +876,7 @@ def _eagerly_encode_cf_datetime(
         time_units, ref_date = _unpack_time_units_and_ref_date(units)
         # data_time_units, data_ref_date = _unpack_time_units_and_ref_date(data_units)
         time_delta = _time_units_to_timedelta64(time_units)
-        print("enc2", data_units, time_units, time_delta)
+        print("datetime64->enc2", data_units, time_units, time_delta)
 
         # Wrap the dates in a DatetimeIndex to do the subtraction to ensure
         # an OverflowError is raised if the ref_date is too far away from
@@ -872,11 +886,21 @@ def _eagerly_encode_cf_datetime(
         dates_as_index = pd.DatetimeIndex(ravel(dates))
         print(dates_as_index)
         time_deltas = dates_as_index - ref_date
-        print(time_deltas)
-
+        print(
+            "datetime64->unit:", time_deltas, time_deltas.unit, time_deltas.components
+        )
+        wu = _netcdf_to_numpy_timeunit(time_units)
         # retrieve needed units to faithfully encode to int64
         needed_units, data_ref_date = _unpack_time_units_and_ref_date(data_units)
-        print("units:", data_units, time_units, units, needed_units, data_ref_date)
+        print(
+            "datetime64->units:",
+            wu,
+            data_units,
+            time_units,
+            units,
+            needed_units,
+            data_ref_date,
+        )
         switch = False
         if data_units != units:
             switch = True
@@ -890,11 +914,17 @@ def _eagerly_encode_cf_datetime(
                 print(ref_delta, data_delta)
                 if (ref_delta % data_delta) > np.timedelta64(0, "ns"):
                     needed_units = _infer_time_units_from_diff(ref_delta)
-                print("NU:", needed_units)
+                print("datetime64->NU:", needed_units)
 
         # needed time delta to encode faithfully to int64
         needed_time_delta = _time_units_to_timedelta64(needed_units)
-        print(time_delta, needed_time_delta)
+        print(
+            "datetime64->td:",
+            time_delta,
+            needed_time_delta,
+            time_delta > needed_time_delta,
+            switch,
+        )
 
         floor_division = np.issubdtype(dtype, np.integer) or dtype is None
         if time_delta > needed_time_delta or switch:
@@ -921,12 +951,16 @@ def _eagerly_encode_cf_datetime(
                 )
                 time_delta = needed_time_delta
                 floor_division = True
-        print("enc3")
-        print(time_deltas)
-        print(time_delta)
-        print(floor_division)
+
+        if time_deltas.unit != wu:
+            # multiply by ratio between wanted units and current units
+            time_delta = time_delta * (
+                _NS_PER_TIME_DELTA[wu] / _NS_PER_TIME_DELTA[time_deltas.unit]
+            )
+            print("WORKING", time_delta)
+        print("datetime64->enc3:", time_delta, time_deltas, floor_division)
         num = _division(time_deltas, time_delta, floor_division)
-        print(num)
+        print("datetime64->enc4:", num)
         num = reshape(num.values, dates.shape)
 
     except (OutOfBoundsDatetime, OverflowError, ValueError):
@@ -1010,14 +1044,15 @@ def _eagerly_encode_cf_timedelta(
     allow_units_modification: bool = True,
 ) -> tuple[T_DuckArray, str]:
     data_units = infer_timedelta_units(timedeltas)
-    print("enc0", data_units)
+    print("timedelta->enc0:", data_units, units, dtype)
     if units is None:
         units = data_units
-
+    print("timedelta->enc0a:", timedeltas, timedeltas.dtype)
     time_delta = _time_units_to_timedelta64(units)
-    time_deltas = pd.TimedeltaIndex(ravel(timedeltas))
+    nunits = _netcdf_to_numpy_timeunit(units)
+    time_deltas = pd.to_timedelta(ravel(timedeltas), unit=nunits)
 
-    print("enc1", time_delta, time_deltas)
+    print("timedelta->enc1:", nunits, time_delta, time_deltas)
 
     # retrieve needed units to faithfully encode to int64
     needed_units = data_units
@@ -1026,9 +1061,12 @@ def _eagerly_encode_cf_timedelta(
 
     # needed time delta to encode faithfully to int64
     needed_time_delta = _time_units_to_timedelta64(needed_units)
+    print("timedelta->enc2:", needed_units, needed_time_delta)
 
     floor_division = np.issubdtype(dtype, np.integer) or dtype is None
+    switch = True
     if time_delta > needed_time_delta:
+        switch = False
         floor_division = False
         if dtype is None:
             emit_user_level_warning(
@@ -1044,15 +1082,36 @@ def _eagerly_encode_cf_timedelta(
                 f"Set encoding['dtype'] to floating point dtype to serialize with units {units!r}. "
                 f"Set encoding['units'] to {needed_units!r} to silence this warning ."
             )
+            switch = True
             units = needed_units
             time_delta = needed_time_delta
+
+            # time_deltas = (
+            #         time_deltas
+            #         / _NS_PER_TIME_DELTA[_netcdf_to_numpy_timeunit(needed_units)]
+            # )
+
             floor_division = True
+
+    print("CHECK!!:", units, time_delta)
+    wu = _netcdf_to_numpy_timeunit(units)
+    print(time_deltas, time_deltas.unit, wu)
+    print(_NS_PER_TIME_DELTA[wu] / _NS_PER_TIME_DELTA[time_deltas.unit])
+    if switch and time_deltas.unit != wu:
+        time_deltas = time_deltas / (
+            _NS_PER_TIME_DELTA[wu] / _NS_PER_TIME_DELTA[time_deltas.unit]
+        )
+    print("timedelta->enc3:", wu, time_deltas, time_deltas.unit)
 
     num = _division(time_deltas, time_delta, floor_division)
     num = reshape(num.values, timedeltas.shape)
 
+    print("timedelta->enc4:", num)
+
     if dtype is not None:
         num = _cast_to_dtype_if_safe(num, dtype)
+
+    print("timedelta->enc4:", num, type(num), units)
 
     return num, units
 

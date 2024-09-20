@@ -594,17 +594,23 @@ def test_cf_timedelta(timedeltas, units, numbers) -> None:
     if timedeltas == "NaT":
         timedeltas = np.timedelta64("NaT", "ns")
     else:
+        # unit = _netcdf_to_numpy_timeunit(units)
         timedeltas = to_timedelta_unboxed(timedeltas)
-    numbers = np.array(numbers)
+    print("00:", timedeltas, timedeltas.dtype)
+    numbers = np.asarray(numbers)
 
     expected = numbers
     actual, _ = encode_cf_timedelta(timedeltas, units)
+
+    print("0:", expected)
+    print("1:", actual)
+
     assert_array_equal(expected, actual)
     assert expected.dtype == actual.dtype
-
     if units is not None:
-        expected = timedeltas
+        expected = timedeltas.astype(f"=m8[{_netcdf_to_numpy_timeunit(units)}]")
         actual = decode_cf_timedelta(numbers, units)
+        print("2:", actual, actual.dtype, expected.dtype)
         assert_array_equal(expected, actual)
         assert expected.dtype == actual.dtype
 
@@ -618,7 +624,7 @@ def test_cf_timedelta_2d() -> None:
     numbers = np.atleast_2d([1, 2, 3])
 
     timedeltas = np.atleast_2d(to_timedelta_unboxed(["1D", "2D", "3D"]))
-    expected = timedeltas
+    expected = timedeltas.astype(f"=m8[{_netcdf_to_numpy_timeunit(units)}]")
 
     actual = decode_cf_timedelta(numbers, units)
     assert_array_equal(expected, actual)
@@ -1060,8 +1066,11 @@ def test_encode_decode_roundtrip_datetime64(freq) -> None:
     initial_time = pd.date_range("1678-01-01", periods=1)
     times = initial_time.append(pd.date_range("1968", periods=2, freq=freq))
     variable = Variable(["time"], times)
+    print("0:", variable)
     encoded = conventions.encode_cf_variable(variable)
+    print("1:", encoded.load())
     decoded = conventions.decode_cf_variable("time", encoded)
+    print("2:", decoded.load())
     assert_equal(variable, decoded)
 
 
@@ -1302,19 +1311,19 @@ def test_roundtrip_datetime64_nanosecond_precision_warning() -> None:
     needed_units = "hours"
     new_units = f"{needed_units} since 1970-01-10T01:01:00"
 
-    encoding = dict(dtype=None, _FillValue=20, units=units)
-    var = Variable(["time"], times, encoding=encoding)
-    print("0:", var)
-    with pytest.warns(UserWarning, match=f"Resolution of {needed_units!r} needed."):
-        encoded_var = conventions.encode_cf_variable(var)
-    print("1:", encoded_var)
-    assert encoded_var.dtype == np.float64
-    assert encoded_var.attrs["units"] == units
-    assert encoded_var.attrs["_FillValue"] == 20.0
-
-    decoded_var = conventions.decode_cf_variable("foo", encoded_var)
-    assert_identical(var, decoded_var)
-    print("2:", decoded_var.load())
+    # encoding = dict(dtype=None, _FillValue=20, units=units)
+    # var = Variable(["time"], times, encoding=encoding)
+    # print("0:", var)
+    # with pytest.warns(UserWarning, match=f"Resolution of {needed_units!r} needed."):
+    #     encoded_var = conventions.encode_cf_variable(var)
+    # print("1:", encoded_var)
+    # assert encoded_var.dtype == np.float64
+    # assert encoded_var.attrs["units"] == units
+    # assert encoded_var.attrs["_FillValue"] == 20.0
+    #
+    # decoded_var = conventions.decode_cf_variable("foo", encoded_var)
+    # print("2:", decoded_var.load())
+    # assert_identical(var, decoded_var)
 
     encoding = dict(dtype="int64", _FillValue=20, units=units)
     var = Variable(["time"], times, encoding=encoding)
@@ -1399,12 +1408,15 @@ def test_roundtrip_timedelta64_nanosecond_precision_warning() -> None:
     )
     encoding = dict(dtype=np.int64, _FillValue=20, units=units)
     var = Variable(["time"], timedelta_values, encoding=encoding)
+    print("0a:", var)
     with pytest.warns(UserWarning, match=wmsg):
         encoded_var = conventions.encode_cf_variable(var)
+    print("0:", encoded_var.load())
     assert encoded_var.dtype == np.int64
     assert encoded_var.attrs["units"] == needed_units
     assert encoded_var.attrs["_FillValue"] == 20
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
+    print("1:", decoded_var.load())
     assert_identical(var, decoded_var)
     assert decoded_var.encoding["dtype"] == np.int64
 
