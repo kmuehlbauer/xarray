@@ -1311,19 +1311,19 @@ def test_roundtrip_datetime64_nanosecond_precision_warning() -> None:
     needed_units = "hours"
     new_units = f"{needed_units} since 1970-01-10T01:01:00"
 
-    # encoding = dict(dtype=None, _FillValue=20, units=units)
-    # var = Variable(["time"], times, encoding=encoding)
-    # print("0:", var)
-    # with pytest.warns(UserWarning, match=f"Resolution of {needed_units!r} needed."):
-    #     encoded_var = conventions.encode_cf_variable(var)
-    # print("1:", encoded_var)
-    # assert encoded_var.dtype == np.float64
-    # assert encoded_var.attrs["units"] == units
-    # assert encoded_var.attrs["_FillValue"] == 20.0
-    #
-    # decoded_var = conventions.decode_cf_variable("foo", encoded_var)
-    # print("2:", decoded_var.load())
-    # assert_identical(var, decoded_var)
+    encoding = dict(dtype=None, _FillValue=20, units=units)
+    var = Variable(["time"], times, encoding=encoding)
+    print("0:", var)
+    with pytest.warns(UserWarning, match=f"Resolution of {needed_units!r} needed."):
+        encoded_var = conventions.encode_cf_variable(var)
+    print("1:", encoded_var)
+    assert encoded_var.dtype == np.float64
+    assert encoded_var.attrs["units"] == units
+    assert encoded_var.attrs["_FillValue"] == 20.0
+
+    decoded_var = conventions.decode_cf_variable("foo", encoded_var)
+    print("2:", decoded_var.load())
+    assert_identical(var, decoded_var)
 
     encoding = dict(dtype="int64", _FillValue=20, units=units)
     var = Variable(["time"], times, encoding=encoding)
