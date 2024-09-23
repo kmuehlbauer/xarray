@@ -311,15 +311,15 @@ def _decode_datetime_with_pandas(
 
     ref_epoch = nanosecond_precision_timestamp("1970-01-01 00:00:00.000000000")
     diff = ref_epoch - ref_date
-    data_delta = diff.resolution.to_timedelta64()
+    # data_delta = diff.resolution.to_timedelta64()
     comp = diff.components
     print("ZZ", time_units, ref_date, ref_epoch, diff, diff.resolution)
 
-    if time_delta > data_delta:  # > np.timedelta64(0, "ns"):
-        time_delta = data_delta
-        print("Yikes!", time_delta, data_delta, time_delta % data_delta)
-    else:
-        print("NOOOOOO", time_delta, data_delta, time_delta % data_delta)
+    # if time_delta > data_delta:  # > np.timedelta64(0, "ns"):
+    #     time_delta = data_delta
+    #     print("Yikes!", time_delta, data_delta, time_delta % data_delta)
+    # else:
+    #     print("NOOOOOO", time_delta, data_delta, time_delta % data_delta)
 
     # time_delta = _time_units_to_timedelta64(units)
     print(time_delta)
@@ -393,6 +393,7 @@ def _decode_datetime_with_pandas(
     print((tdelta + ref_date).values.astype(f"=M8[{time_units}]"))
     # return (pd.to_timedelta(flat_num_dates_ns_int, time_units) + ref_date).values
     final_units = k if diff_delta < time_delta else time_units
+    print(final_units)
     return (tdelta + ref_date).values.astype(f"=M8[{final_units}]")
 
 
@@ -854,9 +855,11 @@ def _eagerly_encode_cf_datetime(
     allow_units_modification: bool = True,
 ) -> tuple[T_DuckArray, str, str]:
     dates = asarray(dates)
+    print("datetime64->enc0->dates:", dates)
 
     data_units = infer_datetime_units(dates)
-    print("datetime64->enc0", units, data_units, dtype)
+    print("datetime64->enc1->units", units, data_units, dtype)
+
     if units is None:
         units = data_units
     else:
@@ -865,7 +868,7 @@ def _eagerly_encode_cf_datetime(
     if calendar is None:
         calendar = infer_calendar_name(dates)
 
-    print("datetime64->enc->calendar:", calendar, _is_standard_calendar(calendar))
+    print("datetime64->enc2->calendar:", calendar, _is_standard_calendar(calendar))
 
     try:
         if not _is_standard_calendar(calendar) or dates.dtype.kind == "O":
@@ -876,18 +879,21 @@ def _eagerly_encode_cf_datetime(
         time_units, ref_date = _unpack_time_units_and_ref_date(units)
         # data_time_units, data_ref_date = _unpack_time_units_and_ref_date(data_units)
         time_delta = _time_units_to_timedelta64(time_units)
-        print("datetime64->enc2", data_units, time_units, time_delta)
+        print("datetime64->enc3->ref_date", time_units, ref_date, time_delta)
 
         # Wrap the dates in a DatetimeIndex to do the subtraction to ensure
         # an OverflowError is raised if the ref_date is too far away from
         # dates to be encoded (GH 2272).
-        print(dates)
+        # print(dates)
         # _netcdf_to_numpy_timeunit
         dates_as_index = pd.DatetimeIndex(ravel(dates))
-        print(dates_as_index)
+        print("datetime64->enc4->asindex", dates_as_index)
         time_deltas = dates_as_index - ref_date
         print(
-            "datetime64->unit:", time_deltas, time_deltas.unit, time_deltas.components
+            "datetime64->enc5->deltas:",
+            time_deltas,
+            time_deltas.unit,
+            time_deltas.components,
         )
         wu = _netcdf_to_numpy_timeunit(time_units)
         # retrieve needed units to faithfully encode to int64
@@ -945,22 +951,27 @@ def _eagerly_encode_cf_datetime(
                     f"Set encoding['units'] to {new_units!r} to silence this warning ."
                 )
                 units = new_units
-                time_deltas = (
-                    time_deltas
-                    / _NS_PER_TIME_DELTA[_netcdf_to_numpy_timeunit(needed_units)]
-                )
+                # time_deltas = (
+                #     time_deltas
+                #     / _NS_PER_TIME_DELTA[_netcdf_to_numpy_timeunit(needed_units)]
+                # )
                 time_delta = needed_time_delta
                 floor_division = True
 
         if time_deltas.unit != wu:
             # multiply by ratio between wanted units and current units
+            print(
+                "WORKING",
+                time_delta,
+                (_NS_PER_TIME_DELTA[wu] / _NS_PER_TIME_DELTA[time_deltas.unit]),
+            )
             time_delta = time_delta * (
                 _NS_PER_TIME_DELTA[wu] / _NS_PER_TIME_DELTA[time_deltas.unit]
             )
             print("WORKING", time_delta)
-        print("datetime64->enc3:", time_delta, time_deltas, floor_division)
+        print("datetime64->enc6:", time_delta, time_deltas, floor_division)
         num = _division(time_deltas, time_delta, floor_division)
-        print("datetime64->enc4:", num)
+        print("datetime64->enc7:", num)
         num = reshape(num.values, dates.shape)
 
     except (OutOfBoundsDatetime, OverflowError, ValueError):
