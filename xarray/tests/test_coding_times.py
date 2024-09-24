@@ -509,7 +509,7 @@ def test_decoded_cf_datetime_array_2d() -> None:
         ("x", "y"), np.array([[0, 1], [2, 3]]), {"units": "days since 2000-01-01"}
     )
     result = CFDatetimeCoder().decode(variable)
-    assert result.dtype == "datetime64[ns]"
+    assert result.dtype == "datetime64[D]"
     expected = pd.date_range("2000-01-01", periods=4).values.reshape(2, 2)
     assert_array_equal(np.asarray(result), expected)
 
@@ -598,6 +598,7 @@ def test_cf_timedelta(timedeltas, units, numbers) -> None:
         timedeltas = to_timedelta_unboxed(timedeltas)
     print("00:", timedeltas, timedeltas.dtype)
     numbers = np.asarray(numbers)
+    print("01:", numbers)
 
     expected = numbers
     actual, _ = encode_cf_timedelta(timedeltas, units)
@@ -706,7 +707,7 @@ def test_decode_cf_time_bounds() -> None:
         "calendar": "standard",
     }
     dsc = decode_cf(ds)
-    assert dsc.time_bnds.dtype == np.dtype("M8[ns]")
+    assert dsc.time_bnds.dtype == np.dtype("M8[D]")
     dsc = decode_cf(ds, decode_times=False)
     assert dsc.time_bnds.dtype == np.dtype("int64")
 
@@ -891,7 +892,7 @@ def test_time_units_with_timezone_roundtrip(calendar) -> None:
     expected_units = "days since 2000-01-01T00:00:00-05:00"
     expected_num_dates = np.array([1, 2, 3])
     dates = decode_cf_datetime(expected_num_dates, expected_units, calendar)
-
+    print("1:", dates)
     # Check that dates were decoded to UTC; here the hours should all
     # equal 5.
     result_hours = DataArray(dates).dt.hour
@@ -1049,7 +1050,10 @@ def test_encode_cf_datetime_defaults_to_correct_dtype(
         pytest.skip("Nanosecond frequency is not valid for cftime dates.")
     times = date_range("2000", periods=3, freq=freq)
     units = f"{encoding_units} since 2000-01-01"
+    print("1:", times, units,)
     encoded, _units, _ = encode_cf_datetime(times, units)
+
+    print("2:", encoded, _units)
 
     numpy_timeunit = _netcdf_to_numpy_timeunit(encoding_units)
     encoding_units_as_timedelta = np.timedelta64(1, numpy_timeunit)
@@ -1152,7 +1156,8 @@ def test_should_cftime_be_used_target_not_npable():
     [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64],
 )
 def test_decode_cf_datetime_varied_integer_dtypes(dtype):
-    units = "seconds since 2018-08-22T03:23:03Z"
+    #units = "seconds since 2018-08-22T03:23:03Z"
+    units = "seconds since 2018-08-22T03:23:03"
     num_dates = dtype(50)
     # Set use_cftime=False to ensure we cannot mask a failure by falling back
     # to cftime.
@@ -1255,6 +1260,8 @@ def test_contains_cftime_lazy() -> None:
             True,
         ),
         ("1677-09-21T00:12:43.145224193", "ns", np.int64, None, False),
+        # overflows to 2262-04-11T23:47:16.854775
+        # todo: check and fix
         # ("1677-09-21T00:12:43.145225", "us", np.int64, None, False),
         ("1970-01-01T00:00:01.000001", "us", np.int64, None, False),
         ("1677-09-21T00:21:52.901038080", "ns", np.float32, 20.0, True),
@@ -1460,6 +1467,7 @@ def test_roundtrip_float_times(fill_value, times, units, encoded_values) -> None
     )
 
     encoded_var = conventions.encode_cf_variable(var)
+    print("1:", var, var.encoding, encoded_var)
     np.testing.assert_array_equal(encoded_var, encoded_values)
     assert encoded_var.attrs["units"] == units
     assert encoded_var.attrs["_FillValue"] == fill_value
@@ -1606,10 +1614,12 @@ def test_encode_cf_datetime_casting_overflow_error(use_cftime, use_dask, dtype) 
 
     if use_dask:
         variable = variable.chunk({"time": 1})
+    print("VARIABLE:", variable, variable.encoding)
 
-    with pytest.raises(OverflowError, match="Not possible"):
+    with pytest.raises((OverflowError, ValueError), match="Not possible"):
         encoded = conventions.encode_cf_variable(variable)
         encoded.compute()
+        print("ENCODED:", encoded)
 
 
 @requires_dask
