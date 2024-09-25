@@ -344,9 +344,9 @@ def _as_array_or_item(data):
     data = np.asarray(data)
     if data.ndim == 0:
         if data.dtype.kind == "M":
-            data = np.datetime64(data, "ns")
+            data = np.datetime64(data)  # , "ns")
         elif data.dtype.kind == "m":
-            data = np.timedelta64(data, "ns")
+            data = np.timedelta64(data)  # , "ns")
     return data
 
 

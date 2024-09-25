@@ -129,23 +129,34 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
     expected = cftime.num2date(
         num_dates, units, calendar, only_use_cftime_datetimes=True
     )
+    print("1:", expected)
     min_y = np.ravel(np.atleast_1d(expected))[np.nanargmin(num_dates)].year
     max_y = np.ravel(np.atleast_1d(expected))[np.nanargmax(num_dates)].year
-    if min_y >= 1678 and max_y < 2262:
-        expected = cftime_to_nptime(expected)
+    print("1a:", min_y, max_y)
+    # todo: this might be relaxed with non-nanosecond resolution
+    # if min_y >= 1678 and max_y < 2262:
+    #    expected = cftime_to_nptime(expected)
+    print("2:", expected)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "Unable to decode time axis")
         actual = decode_cf_datetime(num_dates, units, calendar)
 
-    abs_diff = np.asarray(abs(actual - expected)).ravel()
-    abs_diff = pd.to_timedelta(abs_diff.tolist()).to_numpy()
+    print("3:", actual, units, calendar)
+    print("3a:", actual.dtype, type(expected))
 
+    abs_diff = np.asarray(abs(actual - expected)).ravel()
+    print("4:", abs_diff)
+    abs_diff = pd.to_timedelta(abs_diff.tolist()).to_numpy()
+    print("4a:", abs_diff)
+    # todo: remove comment
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff <= np.timedelta64(1, "s")).all()
+    assert (abs_diff <= np.timedelta64(1, "us")).all()
     encoded1, _, _ = encode_cf_datetime(actual, units, calendar)
+    print("5:", encoded1)
+    print("5a:", num_dates)
     assert_duckarray_allclose(num_dates, encoded1)
 
     if hasattr(num_dates, "ndim") and num_dates.ndim == 1 and "1000" not in units:
@@ -153,6 +164,7 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
         # note that it *does not* currently work to put
         # non-datetime64 compatible dates into a pandas.Index
         encoded2, _, _ = encode_cf_datetime(pd.Index(actual), units, calendar)
+        print("6:", num_dates)
         assert_duckarray_allclose(num_dates, encoded2)
 
 
@@ -214,7 +226,8 @@ def test_decode_standard_calendar_inside_timestamp_range(calendar) -> None:
     times = pd.date_range("2001-04-01-00", end="2001-04-30-23", freq="h")
     time = cftime.date2num(times.to_pydatetime(), units, calendar=calendar)
     expected = times.values
-    expected_dtype = np.dtype("M8[ns]")
+    # relaxing to non-nanosecond leads to us reolution
+    expected_dtype = np.dtype("M8[us]")
 
     actual = decode_cf_datetime(time, units, calendar=calendar)
     assert actual.dtype == expected_dtype
@@ -285,7 +298,8 @@ def test_decode_standard_calendar_single_element_inside_timestamp_range(
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", "Unable to decode time axis")
             actual = decode_cf_datetime(num_time, units, calendar=calendar)
-        assert actual.dtype == np.dtype("M8[ns]")
+        # relaxing to non-nanosecond leads to us resolution
+        assert actual.dtype == np.dtype("M8[us]")
 
 
 @requires_cftime
@@ -339,15 +353,17 @@ def test_decode_standard_calendar_multidim_time_inside_timestamp_range(
     expected2 = times2.values
 
     actual = decode_cf_datetime(mdim_time, units, calendar=calendar)
-    assert actual.dtype == np.dtype("M8[ns]")
+    # relaxing this to non-nanosecond leads to us resolution
+    assert actual.dtype == np.dtype("M8[us]")
 
     abs_diff1 = abs(actual[:, 0] - expected1)
     abs_diff2 = abs(actual[:, 1] - expected2)
+    # todo: remove comment
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff1 <= np.timedelta64(1, "s")).all()
-    assert (abs_diff2 <= np.timedelta64(1, "s")).all()
+    assert (abs_diff1 <= np.timedelta64(1, "us")).all()
+    assert (abs_diff2 <= np.timedelta64(1, "us")).all()
 
 
 @requires_cftime
@@ -509,7 +525,8 @@ def test_decoded_cf_datetime_array_2d() -> None:
         ("x", "y"), np.array([[0, 1], [2, 3]]), {"units": "days since 2000-01-01"}
     )
     result = CFDatetimeCoder().decode(variable)
-    assert result.dtype == "datetime64[D]"
+    # relaxing this to non-nanosecond leads to second resolution
+    assert result.dtype == "datetime64[s]"
     expected = pd.date_range("2000-01-01", periods=4).values.reshape(2, 2)
     assert_array_equal(np.asarray(result), expected)
 
@@ -682,7 +699,8 @@ def test_decode_cf(calendar) -> None:
         if calendar not in _STANDARD_CALENDARS:
             assert ds.test.dtype == np.dtype("O")
         else:
-            assert ds.test.dtype == np.dtype("M8[ns]")
+            # relaxing this to non-nanosecond leads to second resolution
+            assert ds.test.dtype == np.dtype("M8[s]")
 
 
 def test_decode_cf_time_bounds() -> None:
@@ -707,7 +725,8 @@ def test_decode_cf_time_bounds() -> None:
         "calendar": "standard",
     }
     dsc = decode_cf(ds)
-    assert dsc.time_bnds.dtype == np.dtype("M8[D]")
+    # relaxing this to non-nanosecond leads to second resolution
+    assert dsc.time_bnds.dtype == np.dtype("M8[s]")
     dsc = decode_cf(ds, decode_times=False)
     assert dsc.time_bnds.dtype == np.dtype("int64")
 
@@ -1050,7 +1069,11 @@ def test_encode_cf_datetime_defaults_to_correct_dtype(
         pytest.skip("Nanosecond frequency is not valid for cftime dates.")
     times = date_range("2000", periods=3, freq=freq)
     units = f"{encoding_units} since 2000-01-01"
-    print("1:", times, units,)
+    print(
+        "1:",
+        times,
+        units,
+    )
     encoded, _units, _ = encode_cf_datetime(times, units)
 
     print("2:", encoded, _units)
@@ -1156,7 +1179,7 @@ def test_should_cftime_be_used_target_not_npable():
     [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64],
 )
 def test_decode_cf_datetime_varied_integer_dtypes(dtype):
-    #units = "seconds since 2018-08-22T03:23:03Z"
+    # units = "seconds since 2018-08-22T03:23:03Z"
     units = "seconds since 2018-08-22T03:23:03"
     num_dates = dtype(50)
     # Set use_cftime=False to ensure we cannot mask a failure by falling back

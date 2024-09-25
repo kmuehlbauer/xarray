@@ -400,14 +400,25 @@ class DatasetIOBase:
             actual_dtype = actual.variables[k].dtype
             # TODO: check expected behavior for string dtypes more carefully
             string_kinds = {"O", "S", "U"}
-            assert expected_dtype == actual_dtype or (
-                expected_dtype.kind in string_kinds
-                and actual_dtype.kind in string_kinds
+            # TODO: roundtrip might turn time dtype into more relaxed resolution
+            time_kinds = {"M", "m"}
+            assert (
+                expected_dtype == actual_dtype
+                or (
+                    expected_dtype.kind in string_kinds
+                    and actual_dtype.kind in string_kinds
+                )
+                or (
+                    expected_dtype.kind in time_kinds
+                    and actual_dtype.kind in time_kinds
+                )
             )
 
     def test_roundtrip_test_data(self) -> None:
         expected = create_test_data()
+        print("1:", expected)
         with self.roundtrip(expected) as actual:
+            print("2:", actual)
             self.check_dtypes_roundtripped(expected, actual)
             assert_identical(expected, actual)
 
@@ -595,9 +606,20 @@ class DatasetIOBase:
                     assert actual.t.encoding["calendar"] == expected_calendar
 
     def test_roundtrip_timedelta_data(self) -> None:
-        time_deltas = pd.to_timedelta(["1h", "2h", "NaT"])  # type: ignore[arg-type, unused-ignore]
-        expected = Dataset({"td": ("td", time_deltas), "td0": time_deltas[0]})
+        # todo: roundtripping with relaxed non nanosecond resolution needs default
+        unit = "s"
+        time_deltas = pd.to_timedelta(["1h", "2h", "NaT"]).as_unit(unit)  # type: ignore[arg-type, unused-ignore]
+        print("0:", time_deltas, time_deltas[0])
+        expected = Dataset(
+            {
+                "td": ("td", time_deltas),
+                "td0": time_deltas[0].to_numpy().astype(f"=m8[{unit}]"),
+            }
+        )  # .astype(f"=m8[{unit}]")})
         with self.roundtrip(expected) as actual:
+            print("1:", expected)
+            print("2:", actual)
+            print("3:", actual["td0"].load())
             assert_identical(expected, actual)
 
     def test_roundtrip_float64_data(self) -> None:
@@ -5657,6 +5679,7 @@ def _check_guess_can_open_and_open(entrypoint, obj, engine, expected):
 def test_netcdf4_entrypoint(tmp_path: Path) -> None:
     entrypoint = NetCDF4BackendEntrypoint()
     ds = create_test_data()
+    print(ds)
 
     path = tmp_path / "foo"
     ds.to_netcdf(path, format="NETCDF3_CLASSIC")
