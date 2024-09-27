@@ -86,6 +86,8 @@ _CF_DATETIME_NUM_DATES_UNITS = [
     (np.arange(2), "days since 1000-01-01"),
     (np.arange(0, 100000, 20000), "days since 1900-01-01"),
     (np.arange(0, 100000, 20000), "days since 1-01-01"),
+    (17093304, "hours since 1-1-1 00:00:0.0"),
+    (17093352, "hours since 1-1-1 00:00:0.0"),
     (17093352.0, "hours since 1-1-1 00:00:0.0"),
     ([0.5, 1.5], "hours since 1900-01-01T00:00:00"),
     (0, "milliseconds since 2000-01-01T00:00:00"),
@@ -129,34 +131,21 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
     expected = cftime.num2date(
         num_dates, units, calendar, only_use_cftime_datetimes=True
     )
-    print("1:", expected)
-    min_y = np.ravel(np.atleast_1d(expected))[np.nanargmin(num_dates)].year
-    max_y = np.ravel(np.atleast_1d(expected))[np.nanargmax(num_dates)].year
-    print("1a:", min_y, max_y)
-    # todo: this might be relaxed with non-nanosecond resolution
-    # if min_y >= 1678 and max_y < 2262:
-    #    expected = cftime_to_nptime(expected)
-    print("2:", expected)
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "Unable to decode time axis")
         actual = decode_cf_datetime(num_dates, units, calendar)
 
-    print("3:", actual, units, calendar)
-    print("3a:", actual.dtype, type(expected))
-
+    # move to numpy if possible
+    if not np.issubdtype(actual.dtype, object):
+        expected = cftime_to_nptime(expected)
     abs_diff = np.asarray(abs(actual - expected)).ravel()
-    print("4:", abs_diff)
-    abs_diff = pd.to_timedelta(abs_diff.tolist()).to_numpy()
-    print("4a:", abs_diff)
-    # todo: remove comment
+    abs_diff = pd.to_timedelta(abs_diff).to_numpy()
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
     assert (abs_diff <= np.timedelta64(1, "us")).all()
     encoded1, _, _ = encode_cf_datetime(actual, units, calendar)
-    print("5:", encoded1)
-    print("5a:", num_dates)
     assert_duckarray_allclose(num_dates, encoded1)
 
     if hasattr(num_dates, "ndim") and num_dates.ndim == 1 and "1000" not in units:
@@ -164,7 +153,6 @@ def test_cf_datetime(num_dates, units, calendar) -> None:
         # note that it *does not* currently work to put
         # non-datetime64 compatible dates into a pandas.Index
         encoded2, _, _ = encode_cf_datetime(pd.Index(actual), units, calendar)
-        print("6:", num_dates)
         assert_duckarray_allclose(num_dates, encoded2)
 
 
@@ -211,6 +199,7 @@ def test_decode_cf_datetime_non_iso_strings() -> None:
     for num_dates, units in cases:
         actual = decode_cf_datetime(num_dates, units)
         abs_diff = abs(actual - expected.values)
+        # todo: check, if comment can be removed
         # once we no longer support versions of netCDF4 older than 1.1.5,
         # we could do this check with near microsecond accuracy:
         # https://github.com/Unidata/netcdf4-python/issues/355
@@ -225,17 +214,26 @@ def test_decode_standard_calendar_inside_timestamp_range(calendar) -> None:
     units = "days since 0001-01-01"
     times = pd.date_range("2001-04-01-00", end="2001-04-30-23", freq="h")
     time = cftime.date2num(times.to_pydatetime(), units, calendar=calendar)
+    # todo: times.values return nanosecond resolution
+    # check, if we need to re-code the test
     expected = times.values
-    # relaxing to non-nanosecond leads to us reolution
-    expected_dtype = np.dtype("M8[us]")
 
     actual = decode_cf_datetime(time, units, calendar=calendar)
+    if calendar == "proleptic_gregorian":
+        # relaxing to non-nanosecond leads to s resolution
+        unit = "s"
+        expected_dtype = np.dtype(f"M8[{unit}]")
+    else:
+        unit = "us"
+        expected_dtype = np.dtype(f"M8[{unit}]")
     assert actual.dtype == expected_dtype
     abs_diff = abs(actual - expected)
+    abs_diff = pd.to_timedelta(abs_diff).to_numpy()
+    # todo: check, if comment can be removed
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff <= np.timedelta64(1, "s")).all()
+    assert (abs_diff <= np.timedelta64(3, "us")).all()
 
 
 @requires_cftime
@@ -255,10 +253,11 @@ def test_decode_non_standard_calendar_inside_timestamp_range(calendar) -> None:
     actual = decode_cf_datetime(non_standard_time, units, calendar=calendar)
     assert actual.dtype == expected_dtype
     abs_diff = abs(actual - expected)
+    # todo: check, if comment can be removed
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff <= np.timedelta64(1, "s")).all()
+    assert (abs_diff <= np.timedelta64(1, "us")).all()
 
 
 @requires_cftime
@@ -275,17 +274,26 @@ def test_decode_dates_outside_timestamp_range(calendar) -> None:
     expected = cftime.num2date(
         time, units, calendar=calendar, only_use_cftime_datetimes=True
     )
-    expected_date_type = type(expected[0])
+    # non-nanosecond relaxing
+    if calendar == "proleptic_gregorian":
+        expected_date_type = np.dtype("datetime64[s]").type
+    else:
+        expected_date_type = type(expected[0])
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "Unable to decode time axis")
         actual = decode_cf_datetime(time, units, calendar=calendar)
+    # non-nanosecond relaxing
+    if not np.issubdtype(actual.dtype, object):
+        expected = cftime_to_nptime(expected)
+
     assert all(isinstance(value, expected_date_type) for value in actual)
     abs_diff = abs(actual - expected)
+    # todo: check, if comment can be removed
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff <= np.timedelta64(1, "s")).all()
+    assert (abs_diff <= np.timedelta64(1, "us")).all()
 
 
 @requires_cftime
@@ -299,7 +307,11 @@ def test_decode_standard_calendar_single_element_inside_timestamp_range(
             warnings.filterwarnings("ignore", "Unable to decode time axis")
             actual = decode_cf_datetime(num_time, units, calendar=calendar)
         # relaxing to non-nanosecond leads to us resolution
-        assert actual.dtype == np.dtype("M8[us]")
+        if calendar == "proleptic_gregorian":
+            unit = "s"
+        else:
+            unit = "us"
+        assert actual.dtype == np.dtype(f"M8[{unit}]")
 
 
 @requires_cftime
@@ -353,12 +365,16 @@ def test_decode_standard_calendar_multidim_time_inside_timestamp_range(
     expected2 = times2.values
 
     actual = decode_cf_datetime(mdim_time, units, calendar=calendar)
-    # relaxing this to non-nanosecond leads to us resolution
-    assert actual.dtype == np.dtype("M8[us]")
+    # relaxing to non-nanosecond leads to us resolution
+    if calendar == "proleptic_gregorian":
+        unit = "s"
+    else:
+        unit = "us"
+    assert actual.dtype == np.dtype(f"M8[{unit}]")
 
     abs_diff1 = abs(actual[:, 0] - expected1)
     abs_diff2 = abs(actual[:, 1] - expected2)
-    # todo: remove comment
+    # todo: check, if comment can be removed
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
@@ -400,11 +416,12 @@ def test_decode_nonstandard_calendar_multidim_time_inside_timestamp_range(
     assert actual.dtype == expected_dtype
     abs_diff1 = abs(actual[:, 0] - expected1)
     abs_diff2 = abs(actual[:, 1] - expected2)
+    # todo: check, if comment can be removed
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff1 <= np.timedelta64(1, "s")).all()
-    assert (abs_diff2 <= np.timedelta64(1, "s")).all()
+    assert (abs_diff1 <= np.timedelta64(1, "us")).all()
+    assert (abs_diff2 <= np.timedelta64(1, "us")).all()
 
 
 @requires_cftime
@@ -430,15 +447,24 @@ def test_decode_multidim_time_outside_timestamp_range(calendar) -> None:
         warnings.filterwarnings("ignore", "Unable to decode time axis")
         actual = decode_cf_datetime(mdim_time, units, calendar=calendar)
 
-    assert actual.dtype == np.dtype("O")
+    # relaxing to non-nanosecond leads to s resolution
+    if not np.issubdtype(actual.dtype, object):
+        dtype = np.dtype("<M8[s]")
+        expected1 = cftime_to_nptime(expected1)
+        expected2 = cftime_to_nptime(expected2)
+    else:
+        dtype = np.dtype("O")
+
+    assert actual.dtype == dtype
 
     abs_diff1 = abs(actual[:, 0] - expected1)
     abs_diff2 = abs(actual[:, 1] - expected2)
+    # todo: check, if comment can be removed
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
-    assert (abs_diff1 <= np.timedelta64(1, "s")).all()
-    assert (abs_diff2 <= np.timedelta64(1, "s")).all()
+    assert (abs_diff1 <= np.timedelta64(1, "us")).all()
+    assert (abs_diff2 <= np.timedelta64(1, "us")).all()
 
 
 @requires_cftime
@@ -611,24 +637,17 @@ def test_cf_timedelta(timedeltas, units, numbers) -> None:
     if timedeltas == "NaT":
         timedeltas = np.timedelta64("NaT", "ns")
     else:
-        # unit = _netcdf_to_numpy_timeunit(units)
         timedeltas = to_timedelta_unboxed(timedeltas)
-    print("00:", timedeltas, timedeltas.dtype)
     numbers = np.asarray(numbers)
-    print("01:", numbers)
 
     expected = numbers
     actual, _ = encode_cf_timedelta(timedeltas, units)
-
-    print("0:", expected)
-    print("1:", actual)
 
     assert_array_equal(expected, actual)
     assert expected.dtype == actual.dtype
     if units is not None:
         expected = timedeltas.astype(f"=m8[{_netcdf_to_numpy_timeunit(units)}]")
         actual = decode_cf_timedelta(numbers, units)
-        print("2:", actual, actual.dtype, expected.dtype)
         assert_array_equal(expected, actual)
         assert expected.dtype == actual.dtype
 
@@ -877,9 +896,7 @@ def test_encode_expected_failures() -> None:
 def test_encode_cf_datetime_pandas_min() -> None:
     # GH 2623
     dates = pd.date_range("2000", periods=3)
-    print("0", dates)
     num, units, calendar = encode_cf_datetime(dates)
-    print("1", num, units, calendar)
     expected_num = np.array([0.0, 1.0, 2.0])
     expected_units = "days since 2000-01-01 00:00:00"
     expected_calendar = "proleptic_gregorian"
@@ -911,7 +928,6 @@ def test_time_units_with_timezone_roundtrip(calendar) -> None:
     expected_units = "days since 2000-01-01T00:00:00-05:00"
     expected_num_dates = np.array([1, 2, 3])
     dates = decode_cf_datetime(expected_num_dates, expected_units, calendar)
-    print("1:", dates)
     # Check that dates were decoded to UTC; here the hours should all
     # equal 5.
     result_hours = DataArray(dates).dt.hour
@@ -958,9 +974,8 @@ def test_use_cftime_default_standard_calendar_out_of_range(
         numerical_dates, units, calendar, only_use_cftime_datetimes=True
     )
 
-    with pytest.warns(SerializationWarning):
-        result = decode_cf_datetime(numerical_dates, units, calendar)
-        np.testing.assert_array_equal(result, expected)
+    result = decode_cf_datetime(numerical_dates, units, calendar)
+    np.testing.assert_array_equal(result, expected)
 
 
 @requires_cftime
@@ -1013,8 +1028,11 @@ def test_use_cftime_false_standard_calendar_in_range(calendar) -> None:
 def test_use_cftime_false_standard_calendar_out_of_range(calendar, units_year) -> None:
     numerical_dates = [0, 1]
     units = f"days since {units_year}-01-01"
-    with pytest.raises(OutOfBoundsDatetime):
+    if calendar == "proleptic_gregorian":
         decode_cf_datetime(numerical_dates, units, calendar, use_cftime=False)
+    else:
+        with pytest.raises(OutOfBoundsDatetime):
+            decode_cf_datetime(numerical_dates, units, calendar, use_cftime=False)
 
 
 @pytest.mark.parametrize("calendar", _NON_STANDARD_CALENDARS)
@@ -1069,14 +1087,7 @@ def test_encode_cf_datetime_defaults_to_correct_dtype(
         pytest.skip("Nanosecond frequency is not valid for cftime dates.")
     times = date_range("2000", periods=3, freq=freq)
     units = f"{encoding_units} since 2000-01-01"
-    print(
-        "1:",
-        times,
-        units,
-    )
     encoded, _units, _ = encode_cf_datetime(times, units)
-
-    print("2:", encoded, _units)
 
     numpy_timeunit = _netcdf_to_numpy_timeunit(encoding_units)
     encoding_units_as_timedelta = np.timedelta64(1, numpy_timeunit)
@@ -1093,11 +1104,8 @@ def test_encode_decode_roundtrip_datetime64(freq) -> None:
     initial_time = pd.date_range("1678-01-01", periods=1)
     times = initial_time.append(pd.date_range("1968", periods=2, freq=freq))
     variable = Variable(["time"], times)
-    print("0:", variable)
     encoded = conventions.encode_cf_variable(variable)
-    print("1:", encoded.load())
-    decoded = conventions.decode_cf_variable("time", encoded)
-    print("2:", decoded.load())
+    decoded = conventions.decode_cf_variable("time", encoded.load())
     assert_equal(variable, decoded)
 
 
@@ -1159,9 +1167,6 @@ def test_decode_encode_roundtrip_with_non_lowercase_letters(calendar) -> None:
 @requires_cftime
 def test_should_cftime_be_used_source_outside_range():
     src = cftime_range("1000-01-01", periods=100, freq="MS", calendar="noleap")
-    # with pytest.raises(
-    #    ValueError, match="Source time range is not valid for numpy datetimes."
-    # ):
     assert not _should_cftime_be_used(src, "standard", False)
 
 
@@ -1179,6 +1184,7 @@ def test_should_cftime_be_used_target_not_npable():
     [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64],
 )
 def test_decode_cf_datetime_varied_integer_dtypes(dtype):
+    # todo: check here!
     # units = "seconds since 2018-08-22T03:23:03Z"
     units = "seconds since 2018-08-22T03:23:03"
     num_dates = dtype(50)
@@ -1285,7 +1291,7 @@ def test_contains_cftime_lazy() -> None:
         ("1677-09-21T00:12:43.145224193", "ns", np.int64, None, False),
         # overflows to 2262-04-11T23:47:16.854775
         # todo: check and fix
-        # ("1677-09-21T00:12:43.145225", "us", np.int64, None, False),
+        ("1677-09-21T00:12:43.145225", "us", np.int64, None, False),
         ("1970-01-01T00:00:01.000001", "us", np.int64, None, False),
         ("1677-09-21T00:21:52.901038080", "ns", np.float32, 20.0, True),
     ],
@@ -1308,9 +1314,7 @@ def test_roundtrip_datetime64_nanosecond_precision(
 
     var = Variable(["time"], times, encoding=encoding)
     assert var.dtype == np.dtype(f"=M8[{timeunit}]")
-    print("1:", var.load())
     encoded_var = conventions.encode_cf_variable(var)
-    print("2:", encoded_var.load())
     assert (
         encoded_var.attrs["units"]
         == f"{_numpy_to_netcdf_timeunit(timeunit)} since 1970-01-01 00:00:00"
@@ -1319,7 +1323,6 @@ def test_roundtrip_datetime64_nanosecond_precision(
     assert encoded_var.data.dtype == dtype
 
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
-    print("3:", decoded_var.load())
     assert decoded_var.dtype == np.dtype(f"=M8[{timeunit}]")
     assert (
         decoded_var.encoding["units"]
@@ -1343,16 +1346,13 @@ def test_roundtrip_datetime64_nanosecond_precision_warning() -> None:
 
     encoding = dict(dtype=None, _FillValue=20, units=units)
     var = Variable(["time"], times, encoding=encoding)
-    print("0:", var)
     with pytest.warns(UserWarning, match=f"Resolution of {needed_units!r} needed."):
         encoded_var = conventions.encode_cf_variable(var)
-    print("1:", encoded_var)
     assert encoded_var.dtype == np.float64
     assert encoded_var.attrs["units"] == units
     assert encoded_var.attrs["_FillValue"] == 20.0
 
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
-    print("2:", decoded_var.load())
     assert_identical(var, decoded_var)
 
     encoding = dict(dtype="int64", _FillValue=20, units=units)
@@ -1364,11 +1364,9 @@ def test_roundtrip_datetime64_nanosecond_precision_warning() -> None:
     assert encoded_var.dtype == np.int64
     assert encoded_var.attrs["units"] == new_units
     assert encoded_var.attrs["_FillValue"] == 20
-    print("3:", encoded_var.load())
 
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
     assert_identical(var, decoded_var)
-    print("4:", decoded_var.load())
 
     encoding = dict(dtype="float64", _FillValue=20, units=units)
     var = Variable(["time"], times, encoding=encoding)
@@ -1378,25 +1376,20 @@ def test_roundtrip_datetime64_nanosecond_precision_warning() -> None:
     assert encoded_var.dtype == np.float64
     assert encoded_var.attrs["units"] == units
     assert encoded_var.attrs["_FillValue"] == 20.0
-    print("5:", encoded_var.load())
 
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
     assert_identical(var, decoded_var)
-    print("6:", decoded_var.load())
 
     encoding = dict(dtype="int64", _FillValue=20, units=new_units)
     var = Variable(["time"], times, encoding=encoding)
-    # with warnings.catch_warnings():
-    #    warnings.simplefilter("error")
+
     encoded_var = conventions.encode_cf_variable(var)
     assert encoded_var.dtype == np.int64
     assert encoded_var.attrs["units"] == new_units
     assert encoded_var.attrs["_FillValue"] == 20
-    print("7:", encoded_var.load())
 
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
     assert_identical(var, decoded_var)
-    print("8:", decoded_var.load())
 
 
 @pytest.mark.parametrize(
@@ -1438,15 +1431,12 @@ def test_roundtrip_timedelta64_nanosecond_precision_warning() -> None:
     )
     encoding = dict(dtype=np.int64, _FillValue=20, units=units)
     var = Variable(["time"], timedelta_values, encoding=encoding)
-    print("0a:", var)
     with pytest.warns(UserWarning, match=wmsg):
         encoded_var = conventions.encode_cf_variable(var)
-    print("0:", encoded_var.load())
     assert encoded_var.dtype == np.int64
     assert encoded_var.attrs["units"] == needed_units
     assert encoded_var.attrs["_FillValue"] == 20
     decoded_var = conventions.decode_cf_variable("foo", encoded_var)
-    print("1:", decoded_var.load())
     assert_identical(var, decoded_var)
     assert decoded_var.encoding["dtype"] == np.int64
 
@@ -1490,7 +1480,6 @@ def test_roundtrip_float_times(fill_value, times, units, encoded_values) -> None
     )
 
     encoded_var = conventions.encode_cf_variable(var)
-    print("1:", var, var.encoding, encoded_var)
     np.testing.assert_array_equal(encoded_var, encoded_values)
     assert encoded_var.attrs["units"] == units
     assert encoded_var.attrs["_FillValue"] == fill_value
@@ -1637,12 +1626,10 @@ def test_encode_cf_datetime_casting_overflow_error(use_cftime, use_dask, dtype) 
 
     if use_dask:
         variable = variable.chunk({"time": 1})
-    print("VARIABLE:", variable, variable.encoding)
 
     with pytest.raises((OverflowError, ValueError), match="Not possible"):
         encoded = conventions.encode_cf_variable(variable)
         encoded.compute()
-        print("ENCODED:", encoded)
 
 
 @requires_dask

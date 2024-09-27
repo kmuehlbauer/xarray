@@ -314,7 +314,10 @@ def create_test_data(
             f'Not enough letters for filling this dimension size ({_dims["dim3"]})'
         )
     obj["dim3"] = ("dim3", list(string.ascii_lowercase[0 : _dims["dim3"]]))
-    obj["time"] = ("time", pd.date_range("2000-01-01", periods=20))
+    # non - nanosecond relaxing
+    # todo: check better default
+    unit = "s"
+    obj["time"] = ("time", pd.date_range("2000-01-01", periods=20).as_unit(unit))
     for v, dims in sorted(_vars.items()):
         data = rs.normal(size=tuple(_dims[d] for d in dims))
         obj[v] = (dims, data)

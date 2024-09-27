@@ -448,7 +448,7 @@ class TestDecodeCF:
         )
 
         dsc = conventions.decode_cf(ds)
-        assert dsc.timedelta.dtype == np.dtype("m8[s]")
+        assert dsc.timedelta.dtype == np.dtype("m8[ns]")
         assert dsc.time.dtype == np.dtype("M8[s]")
         dsc = conventions.decode_cf(ds, decode_times=False)
         assert dsc.timedelta.dtype == np.dtype("int64")
@@ -457,7 +457,7 @@ class TestDecodeCF:
         assert dsc.timedelta.dtype == np.dtype("int64")
         assert dsc.time.dtype == np.dtype("M8[s]")
         dsc = conventions.decode_cf(ds, decode_times=False, decode_timedelta=True)
-        assert dsc.timedelta.dtype == np.dtype("m8[s]")
+        assert dsc.timedelta.dtype == np.dtype("m8[ns]")
         assert dsc.time.dtype == np.dtype("int64")
 
 

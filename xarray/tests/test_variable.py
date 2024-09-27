@@ -1124,7 +1124,7 @@ class TestVariable(VariableSubclassobjects):
         "values, dtype",
         [
             (np.datetime64("2000-01-01"), "datetime64[s]"),
-            (pd.Timestamp("2000-01-01T00"), "datetime64[ns]"),
+            (pd.Timestamp("2000-01-01T00"), "datetime64[s]"),
             (datetime(2000, 1, 1), "datetime64[ns]"),
         ],
     )
@@ -1167,8 +1167,8 @@ class TestVariable(VariableSubclassobjects):
 
     def test_0d_datetime(self):
         v = Variable([], pd.Timestamp("2000-01-01"))
-        assert v.dtype == np.dtype("datetime64[ns]")
-        assert v.values == np.datetime64("2000-01-01", "ns")
+        assert v.dtype == np.dtype("datetime64[s]")
+        assert v.values == np.datetime64("2000-01-01", "s")
 
     # @pytest.mark.filterwarnings("ignore:Converting non-nanosecond")
     @pytest.mark.parametrize(
@@ -3004,34 +3004,28 @@ class TestNumpyCoercion:
         (np.datetime64("2000-01-01", "s"), "s", True),
         (np.array([np.datetime64("2000-01-01", "ns")]), "ns", False),
         (np.array([np.datetime64("2000-01-01", "s")]), "s", True),
-        (pd.date_range("2000", periods=1), "s", False),
-        (datetime(2000, 1, 1), "D", has_pandas_3),
-        (np.array([datetime(2000, 1, 1)]), "D", has_pandas_3),
+        (pd.date_range("2000", periods=1), "ns", False),
+        (datetime(2000, 1, 1), "ns", has_pandas_3),
+        (np.array([datetime(2000, 1, 1)]), "ns", has_pandas_3),
         (
             pd.date_range("2000", periods=1, tz=pytz.timezone("America/New_York")),
-            "s",
+            "ns",
             False,
         ),
         (
             pd.Series(
                 pd.date_range("2000", periods=1, tz=pytz.timezone("America/New_York"))
             ),
-            "s",
+            "ns",
             False,
         ),
     ],
     ids=lambda x: f"{x}",
 )
 def test_datetime_conversion_warning(values, timestr, warns) -> None:
+    # todo: check -> warns and probably remove it
     dims = ["time"] if isinstance(values, np.ndarray | pd.Index | pd.Series) else []
-    # if warns:
-    #    with pytest.warns(UserWarning, match="non-nanosecond precision datetime"):
-    #        var = Variable(dims, values)
-    # else:
-    #    with warnings.catch_warnings():
-    #        warnings.simplefilter("error")
     var = Variable(dims, values)
-
     if var.dtype.kind == "M":
         assert var.dtype == np.dtype(f"datetime64[{timestr}]")
     else:
@@ -3048,40 +3042,46 @@ tz_ny = pytz.timezone("America/New_York")
 
 
 @pytest.mark.parametrize(
-    ["data", "dtype"],
+    ["data", "dtype", "dtype2"],
     [
-        pytest.param(pd.date_range("2000", periods=1), "datetime64[s]", id="index-sec"),
+        pytest.param(
+            pd.date_range("2000", periods=1),
+            "datetime64[s]",
+            "datetime64[s]",
+            id="index-sec",
+        ),
         pytest.param(
             pd.Series(pd.date_range("2000", periods=1)),
+            "datetime64[s]",
             "datetime64[s]",
             id="series-sec",
         ),
         pytest.param(
             pd.date_range("2000", periods=1, tz=tz_ny),
             pd.DatetimeTZDtype("s", tz_ny),  # type: ignore[arg-type]
+            "datetime64[s]",
             id="index-timezone",
         ),
         pytest.param(
             pd.Series(pd.date_range("2000", periods=1, tz=tz_ny)),
             pd.DatetimeTZDtype("s", tz_ny),  # type: ignore[arg-type]
+            "datetime64[s]",
             id="series-timezone",
         ),
     ],
 )
 def test_pandas_two_only_datetime_conversion_warnings(
-    data: pd.DatetimeIndex | pd.Series, dtype: str | pd.DatetimeTZDtype
+    data: pd.DatetimeIndex | pd.Series, dtype: str | pd.DatetimeTZDtype, dtype2: str
 ) -> None:
-    with pytest.warns(UserWarning, match="non-nanosecond precision datetime"):
-        var = Variable(["time"], data.astype(dtype))  # type: ignore[arg-type]
-
+    var = Variable(["time"], data.astype(dtype))  # type: ignore[arg-type]
     if var.dtype.kind == "M":
-        assert var.dtype == np.dtype("datetime64[ns]")
+        assert var.dtype == np.dtype(dtype2)
     else:
         # The only case where a non-datetime64 dtype can occur currently is in
         # the case that the variable is backed by a timezone-aware
         # DatetimeIndex, and thus is hidden within the PandasIndexingAdapter class.
         assert isinstance(var._data, PandasIndexingAdapter)
-        assert var._data.array.dtype == pd.DatetimeTZDtype("ns", tz_ny)
+        assert var._data.array.dtype == pd.DatetimeTZDtype("s", tz_ny)
 
 
 @pytest.mark.parametrize(
@@ -3092,19 +3092,14 @@ def test_pandas_two_only_datetime_conversion_warnings(
         (np.array([np.timedelta64(10, "ns")]), "ns", False),
         (np.array([np.timedelta64(10, "s")]), "s", True),
         (pd.timedelta_range("1", periods=1), "ns", False),
-        (timedelta(days=1), "D", False),
-        (np.array([timedelta(days=1)]), "D", False),
+        (timedelta(days=1), "ns", False),
+        (np.array([timedelta(days=1)]), "ns", False),
     ],
     ids=lambda x: f"{x}",
 )
 def test_timedelta_conversion_warning(values, timestr, warns) -> None:
+    # todo: check -> warns and probably remove it
     dims = ["time"] if isinstance(values, np.ndarray | pd.Index) else []
-    # if warns:
-    #    with pytest.warns(UserWarning, match="non-nanosecond precision timedelta"):
-    #        var = Variable(dims, values)
-    # else:
-    #    with warnings.catch_warnings():
-    #        warnings.simplefilter("error")
     var = Variable(dims, values)
 
     assert var.dtype == np.dtype(f"timedelta64[{timestr}]")

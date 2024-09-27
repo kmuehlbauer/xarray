@@ -63,8 +63,8 @@ from xarray.coding.times import (
 from xarray.core.common import _contains_datetime_like_objects, is_np_datetime_like
 from xarray.core.pdcompat import (
     NoDefault,
+    any_precision_timestamp,
     count_not_none,
-    nanosecond_precision_timestamp,
     no_default,
 )
 from xarray.core.utils import emit_user_level_warning
@@ -83,12 +83,12 @@ DayOption: TypeAlias = Literal["start", "end"]
 T_FreqStr = TypeVar("T_FreqStr", str, None)
 
 
-def _nanosecond_precision_timestamp(*args, **kwargs):
-    # As of pandas version 3.0, pd.to_datetime(Timestamp(...)) will try to
-    # infer the appropriate datetime precision. Until xarray supports
-    # non-nanosecond precision times, we will use this constructor wrapper to
-    # explicitly create nanosecond-precision Timestamp objects.
-    return pd.Timestamp(*args, **kwargs).as_unit("ns")
+# def _nanosecond_precision_timestamp(*args, **kwargs):
+#     # As of pandas version 3.0, pd.to_datetime(Timestamp(...)) will try to
+#     # infer the appropriate datetime precision. Until xarray supports
+#     # non-nanosecond precision times, we will use this constructor wrapper to
+#     # explicitly create nanosecond-precision Timestamp objects.
+#     return pd.Timestamp(*args, **kwargs).as_unit("ns")
 
 
 def get_date_type(calendar, use_cftime=True):
@@ -97,7 +97,7 @@ def get_date_type(calendar, use_cftime=True):
         raise ImportError("cftime is required for dates with non-standard calendars")
     else:
         if _is_standard_calendar(calendar) and not use_cftime:
-            return _nanosecond_precision_timestamp
+            return any_precision_timestamp
 
         calendars = {
             "noleap": cftime.DatetimeNoLeap,
@@ -1477,8 +1477,8 @@ def date_range_like(source, calendar, use_cftime=None):
         source_calendar = "standard"
         # TODO: the strict enforcement of nanosecond precision Timestamps can be
         # relaxed when addressing GitHub issue #7493.
-        source_start = nanosecond_precision_timestamp(source_start)
-        source_end = nanosecond_precision_timestamp(source_end)
+        source_start = any_precision_timestamp(source_start)
+        source_end = any_precision_timestamp(source_end)
     else:
         if isinstance(source, CFTimeIndex):
             source_calendar = source.calendar

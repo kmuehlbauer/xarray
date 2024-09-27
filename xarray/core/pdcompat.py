@@ -39,7 +39,6 @@ from enum import Enum
 from typing import Literal
 
 import pandas as pd
-from packaging.version import Version
 
 
 def count_not_none(*args) -> int:
@@ -79,7 +78,9 @@ def nanosecond_precision_timestamp(*args, **kwargs) -> pd.Timestamp:
     Note this function should no longer be needed after addressing GitHub issue
     #7493.
     """
-    if Version(pd.__version__) >= Version("2.0.0"):
-        return pd.Timestamp(*args, **kwargs)  # .as_unit("ns")
-    else:
-        return pd.Timestamp(*args, **kwargs)
+    return pd.Timestamp(*args, **kwargs).as_unit("ns")
+
+
+def any_precision_timestamp(*args, **kwargs) -> pd.Timestamp:
+    """Return a any-precision Timestamp object."""
+    return pd.Timestamp(*args, **kwargs)
