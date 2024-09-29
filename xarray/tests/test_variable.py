@@ -1123,7 +1123,7 @@ class TestVariable(VariableSubclassobjects):
     @pytest.mark.parametrize(
         "values, dtype",
         [
-            (np.datetime64("2000-01-01"), "datetime64[s]"),
+            (np.datetime64("2000-01-01"), "datetime64[D]"),
             (pd.Timestamp("2000-01-01T00"), "datetime64[s]"),
             (datetime(2000, 1, 1), "datetime64[ns]"),
         ],
@@ -1144,9 +1144,9 @@ class TestVariable(VariableSubclassobjects):
     @pytest.mark.parametrize(
         "values, dtype",
         [
-            (np.timedelta64(1, "D"), "timedelta64[s]"),
+            (np.timedelta64(1, "D"), "timedelta64[D]"),
             (pd.Timedelta("1 day"), "timedelta64[ns]"),
-            (timedelta(days=1), "timedelta64[ns]"),
+            (timedelta(days=1), "timedelta64[us]"),
         ],
     )
     def test_timedelta64_conversion_scalar(self, values, dtype):
@@ -3092,7 +3092,7 @@ def test_pandas_two_only_datetime_conversion_warnings(
         (np.array([np.timedelta64(10, "ns")]), "ns", False),
         (np.array([np.timedelta64(10, "s")]), "s", True),
         (pd.timedelta_range("1", periods=1), "ns", False),
-        (timedelta(days=1), "ns", False),
+        (timedelta(days=1), "us", False),
         (np.array([timedelta(days=1)]), "ns", False),
     ],
     ids=lambda x: f"{x}",

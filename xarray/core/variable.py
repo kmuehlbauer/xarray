@@ -307,8 +307,8 @@ def as_compatible_data(
     if isinstance(data, timedelta):
         data = np.timedelta64(getattr(data, "value", data))#, "ns")
 
-    if isinstance(data, datetime.datetime):
-        data = np.datetime64(getattr(data, "value", data))
+    #if isinstance(data, datetime.datetime):
+    #    data = np.datetime64(getattr(data, "value", data))
 
     # we don't want nested self-described arrays
     if isinstance(data, pd.Series | pd.DataFrame):

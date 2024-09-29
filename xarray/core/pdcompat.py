@@ -82,5 +82,5 @@ def nanosecond_precision_timestamp(*args, **kwargs) -> pd.Timestamp:
 
 
 def any_precision_timestamp(*args, **kwargs) -> pd.Timestamp:
-    """Return a any-precision Timestamp object."""
+    """Return an any-precision Timestamp object."""
     return pd.Timestamp(*args, **kwargs)

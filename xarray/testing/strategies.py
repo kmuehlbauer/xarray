@@ -76,9 +76,9 @@ def pandas_index_dtypes() -> st.SearchStrategy[np.dtype]:
         | npst.unsigned_integer_dtypes(endianness="=", sizes=(32, 64))
         | npst.floating_dtypes(endianness="=", sizes=(32, 64))
         # TODO: unset max_period
-        | npst.datetime64_dtypes(endianness="=", max_period="ns")
+        | npst.datetime64_dtypes(endianness="=", max_period="D")
         # TODO: set max_period="D"
-        | npst.timedelta64_dtypes(endianness="=", max_period="ns")
+        | npst.timedelta64_dtypes(endianness="=", max_period="D")
         | npst.unicode_string_dtypes(endianness="=")
     )
 
