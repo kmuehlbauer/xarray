@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import datetime
 import itertools
 import math
 import numbers
@@ -199,7 +200,6 @@ def _maybe_wrap_data(data):
 
 
 def _as_nanosecond_precision(data):
-    return data
     dtype = data.dtype
     non_ns_datetime64 = (
         dtype.kind == "M"
@@ -305,7 +305,10 @@ def as_compatible_data(
 
     # todo: check, if this can be relaxed, too
     if isinstance(data, timedelta):
-        data = np.timedelta64(getattr(data, "value", data), "ns")
+        data = np.timedelta64(getattr(data, "value", data))#, "ns")
+
+    if isinstance(data, datetime.datetime):
+        data = np.datetime64(getattr(data, "value", data))
 
     # we don't want nested self-described arrays
     if isinstance(data, pd.Series | pd.DataFrame):
@@ -327,8 +330,14 @@ def as_compatible_data(
     # validate whether the data is valid data types.
     data = np.asarray(data)
 
-    if data.dtype.kind in "OMm":
+    if data.dtype.kind in "O":
+        print("possibly convert O")
         data = _possibly_convert_objects(data)
+
+    if data.dtype.kind in "Mm":
+        print("possibly convert Mm")
+        #data = _possibly_convert_objects(data)
+
     return _maybe_wrap_data(data)
 
 
