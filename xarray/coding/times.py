@@ -848,8 +848,7 @@ def _eagerly_encode_cf_datetime(
         # for chunked arrays we might need another solution as we defer to
         # ns resolution if no units and dtype are given
         try:
-            dates_as_ns_index = pd.DatetimeIndex(ravel(dates)).as_unit("ns")
-            dates_as_ns_index - ref_date
+            pd.DatetimeIndex(ravel(dates)).as_unit("ns") - ref_date
         except Exception as err:
             if calendar != "proleptic_gregorian":
                 raise OutOfBoundsTimedelta from err
