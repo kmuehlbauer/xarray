@@ -410,7 +410,9 @@ class DatasetIOBase:
 
     def test_roundtrip_test_data(self) -> None:
         expected = create_test_data()
+        print("0:", expected)
         with self.roundtrip(expected) as actual:
+            print("1:", actual)
             self.check_dtypes_roundtripped(expected, actual)
             assert_identical(expected, actual)
 

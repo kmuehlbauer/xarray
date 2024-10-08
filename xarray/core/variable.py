@@ -197,34 +197,35 @@ def _maybe_wrap_data(data):
 
 
 def _as_default_precision(data):
-    default_unit = _get_datetime_resolution()
-    dtype = data.dtype
-    non_default_datetime64 = (
-        dtype.kind == "M"
-        and isinstance(dtype, np.dtype)
-        and dtype != np.dtype(f"datetime64[{default_unit}]")
-    )
-    non_default_datetime_tz_dtype = (
-        isinstance(dtype, pd.DatetimeTZDtype) and dtype.unit != default_unit
-    )
-    if non_default_datetime64 or non_default_datetime_tz_dtype:
-        utils.emit_user_level_warning(
-            NON_DEFAULTPRECISION_WARNING.format(
-                case="datetime", res=f"'{default_unit}'"
-            )
-        )
-        if isinstance(dtype, pd.DatetimeTZDtype):
-            default_precision_dtype = pd.DatetimeTZDtype(default_unit, dtype.tz)
-        else:
-            default_precision_dtype = f"datetime64[{default_unit}]"
-        return duck_array_ops.astype(data, default_precision_dtype)
-    elif dtype.kind == "m" and dtype != np.dtype("timedelta64[ns]"):
-        utils.emit_user_level_warning(
-            NON_DEFAULTPRECISION_WARNING.format(case="timedelta", res="'ns'")
-        )
-        return duck_array_ops.astype(data, "timedelta64[ns]")
-    else:
-        return data
+    return data
+    # default_unit = _get_datetime_resolution()
+    # dtype = data.dtype
+    # non_default_datetime64 = (
+    #     dtype.kind == "M"
+    #     and isinstance(dtype, np.dtype)
+    #     and dtype != np.dtype(f"datetime64[{default_unit}]")
+    # )
+    # non_default_datetime_tz_dtype = (
+    #     isinstance(dtype, pd.DatetimeTZDtype) and dtype.unit != default_unit
+    # )
+    # if non_default_datetime64 or non_default_datetime_tz_dtype:
+    #     utils.emit_user_level_warning(
+    #         NON_DEFAULTPRECISION_WARNING.format(
+    #             case="datetime", res=f"'{default_unit}'"
+    #         )
+    #     )
+    #     if isinstance(dtype, pd.DatetimeTZDtype):
+    #         default_precision_dtype = pd.DatetimeTZDtype(default_unit, dtype.tz)
+    #     else:
+    #         default_precision_dtype = f"datetime64[{default_unit}]"
+    #     return duck_array_ops.astype(data, default_precision_dtype)
+    # elif dtype.kind == "m" and dtype != np.dtype("timedelta64[ns]"):
+    #     utils.emit_user_level_warning(
+    #         NON_DEFAULTPRECISION_WARNING.format(case="timedelta", res="'ns'")
+    #     )
+    #     return duck_array_ops.astype(data, "timedelta64[ns]")
+    # else:
+    #     return data
 
 
 def _possibly_convert_objects(values):
