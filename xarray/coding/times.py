@@ -262,6 +262,34 @@ def _check_date_for_units_since_refdate(
             else (ref_date + delta)._as_unit(ref_date_unit)
         )
 
+def _get_reference_date_in_lowest_possible_resolution(ref_date_str, unit):
+    ref_date = pd.Timestamp(ref_date_str)
+    # strip tz information
+    if ref_date.tz is not None:
+        ref_date = ref_date.tz_convert(None)
+    ## get default unit and delta
+    #default_unit = _get_datetime_resolution()
+    #default_delta = np.timedelta64(1, default_unit).astype("timedelta64[ns]")
+    # get ref_date and unit delta
+    ref_date_unit = np.datetime_data(ref_date.asm8)[0]
+    ref_date_delta = np.timedelta64(1, ref_date_unit).astype("timedelta64[ns]")
+    unit_delta = np.timedelta64(1, unit).astype("timedelta64[ns]")
+    # choose the higher resolution
+    # new_time_unit = {
+    #     ref_date_delta: ref_date_unit,
+    #     unit_delta: unit,
+    #     #default_delta: default_unit,
+    # }[min(ref_date_delta, unit_delta)]
+    new_unit = ref_date_unit if ref_date_delta < unit_delta else unit
+    # transform to the highest needed resolution
+    # this will raise accordingly
+    ref_date = (
+        ref_date.as_unit(new_unit)
+        if hasattr(ref_date, "as_unit")
+        else ref_date._as_unit(new_unit)
+    )
+    return ref_date
+
 
 def _decode_datetime_with_pandas(
     flat_num_dates: np.ndarray, units: str, calendar: str
@@ -284,45 +312,13 @@ def _decode_datetime_with_pandas(
     time_units, ref_date_str = _unpack_netcdf_time_units(units)
     time_units = _netcdf_to_numpy_timeunit(time_units)
     try:
-        # relaxed to non-nanosecond resolution
-        ref_date = pd.Timestamp(ref_date_str)
-        # strip tz information
-        if ref_date.tz is not None:
-            ref_date = ref_date.tz_convert(None)
-        # get default unit and delta
-        default_unit = _get_datetime_resolution()
-        default_delta = np.timedelta64(1, default_unit).astype("timedelta64[ns]")
-        # get ref_date and time delta
-        ref_date_unit = (
-            ref_date.unit
-            if hasattr(ref_date, "unit")
-            else np.datetime_data(ref_date.asm8)[0]
-        )
-        ref_date_delta = np.timedelta64(1, ref_date_unit).astype("timedelta64[ns]")
-        time_delta = np.timedelta64(1, time_units).astype("timedelta64[ns]")
-        # choose the highest resolution
-        new_time_units = {
-            ref_date_delta: ref_date_unit,
-            time_delta: time_units,
-            default_delta: default_unit,
-        }[min(default_delta, ref_date_delta, time_delta)]
-        # transform to the highest needed resolution
-        # this will raise accordingly
-        ref_date = (
-            ref_date.as_unit(new_time_units)
-            if hasattr(ref_date, "as_unit")
-            else ref_date._as_unit(new_time_units)
-        )
+        ref_date = _get_reference_date_in_lowest_possible_resolution(ref_date_str, time_units)
     except ValueError as err:
         # ValueError is raised by pd.Timestamp for non-ISO timestamp
         # strings, in which case we fall back to using cftime
         raise OutOfBoundsDatetime from err
 
-    dunit = (
-        ref_date.unit
-        if hasattr(ref_date, "unit")
-        else np.datetime_data(ref_date.asm8)[0]
-    )
+    dunit = np.datetime_data(ref_date.asm8)[0]
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "invalid value encountered", RuntimeWarning)
