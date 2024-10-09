@@ -586,6 +586,12 @@ class DatasetIOBase:
                     warnings.filterwarnings("ignore", "Unable to decode time axis")
 
                 with self.roundtrip(expected, save_kwargs=kwargs) as actual:
+                    # proleptic gregorian will be decoded into numpy datetime64
+                    # fixing to expectations
+                    if actual.t.dtype.kind == "M":
+                        dtype = f"datetime64[{np.datetime_data(actual.t)[0]}]"
+                        expected_decoded_t = expected_decoded_t.astype(dtype)
+                        expected_decoded_t0 = expected_decoded_t0.astype(dtype)
                     abs_diff = abs(actual.t.values - expected_decoded_t)
                     assert (abs_diff <= np.timedelta64(1, "s")).all()
                     assert (
@@ -600,9 +606,12 @@ class DatasetIOBase:
                     assert actual.t.encoding["calendar"] == expected_calendar
 
     def test_roundtrip_timedelta_data(self) -> None:
-        time_deltas = pd.to_timedelta(["1h", "2h", "NaT"])  # type: ignore[arg-type, unused-ignore]
+        time_deltas = pd.to_timedelta(["1h", "2h", "NaT"]).as_unit("s")  # type: ignore[arg-type, unused-ignore]
+        print("0:", time_deltas, time_deltas[0].unit, time_deltas[0])
         expected = Dataset({"td": ("td", time_deltas), "td0": time_deltas[0]})
+        print("0:", expected.td, expected.td0)
         with self.roundtrip(expected) as actual:
+            print("1:", actual)
             assert_identical(expected, actual)
 
     def test_roundtrip_float64_data(self) -> None:

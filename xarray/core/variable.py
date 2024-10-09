@@ -28,7 +28,7 @@ from xarray.core.indexing import (
     VectorizedIndexer,
     as_indexable,
 )
-from xarray.core.options import OPTIONS, _get_datetime_resolution, _get_keep_attrs
+from xarray.core.options import OPTIONS, _get_keep_attrs
 from xarray.core.utils import (
     OrderedSet,
     _default,
@@ -306,10 +306,12 @@ def as_compatible_data(
 
     if isinstance(data, pd.Timestamp):
         # TODO: convert, handle datetime objects, too
-        data = np.datetime64(data.value, "ns")
+        # data = np.datetime64(data.value, "ns")
+        data = data.to_numpy()
 
     if isinstance(data, timedelta):
-        data = np.timedelta64(getattr(data, "value", data), "ns")
+        # data = np.timedelta64(getattr(data, "value", data))#, "ns")
+        data = data.to_numpy()
 
     # we don't want nested self-described arrays
     if isinstance(data, pd.Series | pd.DataFrame):
@@ -359,7 +361,7 @@ def _as_array_or_item(data):
     data = np.asarray(data)
     if data.ndim == 0:
         if data.dtype.kind == "M":
-            data = np.datetime64(data, "ns")
+            data = np.datetime64(data)  # , "ns")
         elif data.dtype.kind == "m":
             data = np.timedelta64(data, "ns")
     return data

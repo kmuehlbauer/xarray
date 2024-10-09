@@ -211,14 +211,17 @@ def test_decode_standard_calendar_inside_timestamp_range(calendar) -> None:
     import cftime
 
     units = "days since 0001-01-01"
-    times = pd.date_range("2001-04-01-00", end="2001-04-30-23", freq="h")
+    times = pd.date_range("2001-04-01-00", end="2001-04-30-23", unit="s", freq="h")
     time = cftime.date2num(times.to_pydatetime(), units, calendar=calendar)
     expected = times.values
-    expected_dtype = np.dtype("M8[ns]")
-
+    expected_dtype = np.dtype("M8[s]")
+    print("0:", time[0], units, calendar)
+    print("1:", expected.astype("int64")[0], expected.dtype)
     actual = decode_cf_datetime(time, units, calendar=calendar)
+    print("2:", actual.astype("int64")[0], actual.dtype)
     assert actual.dtype == expected_dtype
     abs_diff = abs(actual - expected)
+    print("3:", abs_diff[0], abs_diff.dtype)
     # once we no longer support versions of netCDF4 older than 1.1.5,
     # we could do this check with near microsecond accuracy:
     # https://github.com/Unidata/netcdf4-python/issues/355
