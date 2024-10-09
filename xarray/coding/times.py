@@ -250,7 +250,7 @@ def _check_date_for_units_since_refdate(
     delta = date * np.timedelta64(1, unit)
     if not np.isnan(delta):
         # this will raise on dtype overflow for integer dtypes
-        if date.dtype.kind == "iu" and not np.int64(delta) == date:
+        if date.dtype.kind in "iu" and not np.int64(delta) == date:
             raise OutOfBoundsTimedelta(
                 "DType overflow in Datetime/Timedelta calculation."
             )
@@ -262,14 +262,15 @@ def _check_date_for_units_since_refdate(
             else (ref_date + delta)._as_unit(ref_date_unit)
         )
 
+
 def _get_reference_date_in_lowest_possible_resolution(ref_date_str, unit):
     ref_date = pd.Timestamp(ref_date_str)
     # strip tz information
     if ref_date.tz is not None:
         ref_date = ref_date.tz_convert(None)
     ## get default unit and delta
-    #default_unit = _get_datetime_resolution()
-    #default_delta = np.timedelta64(1, default_unit).astype("timedelta64[ns]")
+    # default_unit = _get_datetime_resolution()
+    # default_delta = np.timedelta64(1, default_unit).astype("timedelta64[ns]")
     # get ref_date and unit delta
     ref_date_unit = np.datetime_data(ref_date.asm8)[0]
     ref_date_delta = np.timedelta64(1, ref_date_unit).astype("timedelta64[ns]")
@@ -312,7 +313,9 @@ def _decode_datetime_with_pandas(
     time_units, ref_date_str = _unpack_netcdf_time_units(units)
     time_units = _netcdf_to_numpy_timeunit(time_units)
     try:
-        ref_date = _get_reference_date_in_lowest_possible_resolution(ref_date_str, time_units)
+        ref_date = _get_reference_date_in_lowest_possible_resolution(
+            ref_date_str, time_units
+        )
     except ValueError as err:
         # ValueError is raised by pd.Timestamp for non-ISO timestamp
         # strings, in which case we fall back to using cftime

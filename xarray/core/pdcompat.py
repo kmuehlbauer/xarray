@@ -85,7 +85,7 @@ def default_precision_timestamp(*args, **kwargs) -> pd.Timestamp:
     dt = pd.Timestamp(*args, **kwargs)
     units = ["s", "ms", "us", "ns"]
     default = _get_datetime_resolution()
-    unit = dt.unit if hasattr(dt, "unit") else np.datetime_data(dt.asm8)[0]
+    unit = np.datetime_data(dt.asm8)[0]
     if units.index(default) > units.index(unit):
         dt = dt.as_unit(default)
     return dt
