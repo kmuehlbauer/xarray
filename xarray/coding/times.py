@@ -427,10 +427,12 @@ def decode_cf_datetime(
             dates = _decode_datetime_with_cftime(
                 flat_num_dates.astype(float), units, calendar
             )
-
+            print("AA:", dates, dates.dtype)
+            typ = type(dates[np.nanargmin(num_dates)])
+            border = typ(1582, 10, 15)
             if (
-                dates[np.nanargmin(num_dates)].year < 1678
-                or dates[np.nanargmax(num_dates)].year >= 2262
+                dates[np.nanargmin(num_dates)] < border
+                or dates[np.nanargmax(num_dates)] < border
             ):
                 if _is_standard_calendar(calendar):
                     warnings.warn(
@@ -444,6 +446,7 @@ def decode_cf_datetime(
             else:
                 if _is_standard_calendar(calendar):
                     dates = cftime_to_nptime(dates)
+                print("BB:", dates)
     elif use_cftime:
         dates = _decode_datetime_with_cftime(flat_num_dates, units, calendar)
     else:
@@ -579,15 +582,17 @@ def cftime_to_nptime(times, raise_on_invalid: bool = True) -> np.ndarray:
     If raise_on_invalid is True (default), invalid dates trigger a ValueError.
     Otherwise, the invalid element is replaced by np.NaT."""
     times = np.asarray(times)
-    new = np.empty(times.shape, dtype=f"M8[{_get_datetime_resolution()}]")
+    # new = np.empty(times.shape, dtype=f"M8[{_get_datetime_resolution()}]")
+    new = []
     dt: pd.Timestamp | Literal["NaT"]
-    for i, t in np.ndenumerate(times):
+    for _i, t in np.ndenumerate(times):
         try:
             # Use pandas.Timestamp in place of datetime.datetime, because
             # NumPy casts it safely it np.datetime64[ns] for dates outside
             # 1678 to 2262 (this is not currently the case for
             # datetime.datetime).
-            dt = default_precision_timestamp(
+            # dt = default_precision_timestamp(
+            dt = pd.Timestamp(
                 t.year, t.month, t.day, t.hour, t.minute, t.second, t.microsecond
             )
         except ValueError as e:
@@ -598,8 +603,8 @@ def cftime_to_nptime(times, raise_on_invalid: bool = True) -> np.ndarray:
                 ) from e
             else:
                 dt = "NaT"
-        new[i] = np.datetime64(dt)
-    return new
+        new.append(np.datetime64(dt))
+    return np.asarray(new).reshape(times.shape)
 
 
 def convert_times(times, date_type, raise_on_invalid: bool = True) -> np.ndarray:
@@ -857,6 +862,9 @@ def _eagerly_encode_cf_datetime(
         assert np.issubdtype(dates.dtype, "datetime64")
 
         time_units, ref_date = _unpack_time_units_and_ref_date(units)
+        if calendar != "proleptic_gregorian" and ref_date < pd.Timestamp("1582-10-15"):
+            # out of range reference date
+            raise OutOfBoundsDatetime
         time_delta = _time_units_to_timedelta64(time_units)
         print("E2:", time_units, ref_date, time_delta)
 
@@ -870,7 +878,8 @@ def _eagerly_encode_cf_datetime(
         deltas_unit = np.datetime_data(time_deltas.dtype)[0]
         # todo: check, if this works in any case
         time_delta = time_delta.astype(f"=m8[{deltas_unit}]")
-        print("E3:", dates_as_index, time_deltas, time_deltas.unit)
+        print("E3:", dates_as_index, time_deltas, time_deltas.unit, deltas_unit)
+        print("E3a:", time_delta)
 
         # retrieve needed units to faithfully encode to int64
         needed_units, data_ref_date = _unpack_time_units_and_ref_date(data_units)
@@ -905,8 +914,10 @@ def _eagerly_encode_cf_datetime(
                 )
                 units = new_units
                 time_delta = needed_time_delta
+                time_delta = time_delta.astype(f"=m8[{deltas_unit}]")
                 floor_division = True
 
+        # time_delta = time_delta.astype(f"=m8[{_netcdf_to_numpy_timeunit(needed_units)}]")
         print("E6:", time_deltas, time_delta, floor_division)
         num = _division(time_deltas, time_delta, floor_division)
         num = reshape(num.values, dates.shape)
@@ -1036,6 +1047,7 @@ def _eagerly_encode_cf_timedelta(
             )
             units = needed_units
             time_delta = needed_time_delta
+            time_delta = time_delta.astype(f"=m8[{deltas_unit}]")
             floor_division = True
 
     num = _division(time_deltas, time_delta, floor_division)
