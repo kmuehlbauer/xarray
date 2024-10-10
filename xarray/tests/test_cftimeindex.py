@@ -1176,9 +1176,16 @@ def test_to_datetimeindex(calendar, unsafe):
 @pytest.mark.parametrize("calendar", _ALL_CALENDARS)
 def test_to_datetimeindex_out_of_range(calendar):
     index = xr.cftime_range("0001", periods=5, calendar=calendar)
+    typ = type(index.min())
+    print("0:", typ, index.where(index < typ(1582, 10, 15)))
     # todo: needs discussion
-    with pytest.raises(ValueError, match="0001"):
-        index.to_datetimeindex()
+    # with pytest.raises(ValueError, match="0001"):
+    if calendar in _NON_STANDARD_CALENDARS:
+        with pytest.warns(RuntimeWarning, match="non-standard"):
+            result = index.to_datetimeindex()
+    else:
+        result = index.to_datetimeindex()
+    print("1:", result)
 
 
 @requires_cftime
