@@ -289,7 +289,7 @@ class TestDataset:
             Coordinates:
               * dim2     (dim2) float64 72B 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0
               * dim3     (dim3) {} 40B 'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h' 'i' 'j'
-              * time     (time) datetime64[ns] 160B 2000-01-01 2000-01-02 ... 2000-01-20
+              * time     (time) datetime64[s] 160B 2000-01-01 2000-01-02 ... 2000-01-20
                 numbers  (dim3) int64 80B 0 1 2 0 0 1 1 2 2 3
             Dimensions without coordinates: dim1
             Data variables:
@@ -451,7 +451,7 @@ class TestDataset:
 
         variables:
         \tfloat64 dim2(dim2) ;
-        \tdatetime64[ns] time(time) ;
+        \tdatetime64[s] time(time) ;
         \tfloat64 var1(dim1, dim2) ;
         \t\tvar1:foo = variable ;
         \tfloat64 var2(dim1, dim2) ;
@@ -3549,9 +3549,9 @@ class TestDataset:
 
     def test_expand_dims_non_nanosecond_conversion(self) -> None:
         # Regression test for https://github.com/pydata/xarray/issues/7493#issuecomment-1953091000
-        with pytest.warns(UserWarning, match="non-default precision"):
-            ds = Dataset().expand_dims({"time": [np.datetime64("2018-01-01", "s")]})
-        assert ds.time.dtype == np.dtype("datetime64[ns]")
+        # todo: test still needed?
+        ds = Dataset().expand_dims({"time": [np.datetime64("2018-01-01", "s")]})
+        assert ds.time.dtype == np.dtype("datetime64[s]")
 
     def test_set_index(self) -> None:
         expected = create_test_multiindex()

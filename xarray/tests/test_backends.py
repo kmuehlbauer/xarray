@@ -1594,7 +1594,7 @@ class NetCDF4Base(NetCDFBase):
 
             expected = Dataset()
 
-            time = pd.date_range("1999-01-05", periods=10)
+            time = pd.date_range("1999-01-05", periods=10, unit="s")
             encoding = {"units": units, "dtype": np.dtype("int32")}
             expected["time"] = ("time", time, {}, encoding)
 
@@ -5390,8 +5390,8 @@ def test_use_cftime_standard_calendar_default_in_range(calendar) -> None:
 
 @requires_cftime
 @requires_scipy_or_netCDF4
-@pytest.mark.parametrize("calendar", _STANDARD_CALENDARS)
-@pytest.mark.parametrize("units_year", [1500, 2500])
+@pytest.mark.parametrize("calendar", ["standard", "gregorian"])
+@pytest.mark.parametrize("units_year", [1500, 1582])
 def test_use_cftime_standard_calendar_default_out_of_range(
     calendar, units_year
 ) -> None:
@@ -5483,8 +5483,8 @@ def test_use_cftime_false_standard_calendar_in_range(calendar) -> None:
 
 
 @requires_scipy_or_netCDF4
-@pytest.mark.parametrize("calendar", _STANDARD_CALENDARS)
-@pytest.mark.parametrize("units_year", [1500, 2500])
+@pytest.mark.parametrize("calendar", ["standard", "gregorian"])
+@pytest.mark.parametrize("units_year", [1500, 1582])
 def test_use_cftime_false_standard_calendar_out_of_range(calendar, units_year) -> None:
     x = [0, 1]
     time = [0, 720]

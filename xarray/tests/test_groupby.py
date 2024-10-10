@@ -2126,7 +2126,7 @@ class TestDataArrayResample:
     @requires_scipy
     @pytest.mark.filterwarnings("ignore:Converting non-default")
     def test_upsample_interpolate_bug_2197(self) -> None:
-        dates = pd.date_range("2007-02-01", "2007-03-01", freq="D")
+        dates = pd.date_range("2007-02-01", "2007-03-01", freq="D", unit="s")
         da = xr.DataArray(np.arange(len(dates)), [("time", dates)])
         result = da.resample(time="ME").interpolate("linear")
         expected_times = np.array(
