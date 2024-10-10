@@ -276,6 +276,7 @@ class VariableSubclassobjects(NamedArraySubclassobjects, ABC):
 
     @pytest.mark.filterwarnings("ignore:Converting non-default")
     def test_datetime64_conversion(self):
+        # todo: check, if this test is OK
         times = pd.date_range("2000-01-01", periods=3)
         for values, unit in [
             (times, "ns"),
@@ -287,11 +288,10 @@ class VariableSubclassobjects(NamedArraySubclassobjects, ABC):
             assert v.dtype == np.dtype(f"datetime64[{unit}]")
             assert_array_equal(v.values, times.values)
             assert v.values.dtype == np.dtype(f"datetime64[{unit}]")
-            # same_source = source_ndarray(v.values) is source_ndarray(values)
-            # assert preserve_source == same_source
 
     @pytest.mark.filterwarnings("ignore:Converting non-default")
     def test_timedelta64_conversion(self):
+        # todo: check, if this test is OK
         times = pd.timedelta_range(start=0, periods=3)
         for values, unit in [
             (times, "ns"),
@@ -303,8 +303,6 @@ class VariableSubclassobjects(NamedArraySubclassobjects, ABC):
             assert v.dtype == np.dtype(f"timedelta64[{unit}]")
             assert_array_equal(v.values, times.values)
             assert v.values.dtype == np.dtype(f"timedelta64[{unit}]")
-            # same_source = source_ndarray(v.values) is source_ndarray(values)
-            # assert preserve_source == same_source
 
     def test_object_conversion(self):
         data = np.arange(5).astype(str).astype(object)
@@ -315,15 +313,12 @@ class VariableSubclassobjects(NamedArraySubclassobjects, ABC):
     def test_datetime64_valid_range(self):
         # todo: test still needed?
         data = np.datetime64("1250-01-01", "us")
-        # pderror = pd.errors.OutOfBoundsDatetime
-        # with pytest.raises(pderror, match=r"Out of bounds nanosecond"):
         self.cls(["t"], [data])
 
     @pytest.mark.filterwarnings("ignore:Converting non-default")
     def test_timedelta64_valid_range(self):
+        # todo: test still needed?
         data = np.timedelta64("200000", "D")
-        # pderror = pd.errors.OutOfBoundsTimedelta
-        # with pytest.raises(pderror, match=r"Cannot convert"):
         self.cls(["t"], [data])
 
     def test_pandas_data(self):
@@ -1087,6 +1082,7 @@ class TestVariable(VariableSubclassobjects):
         ],
     )
     def test_datetime64_conversion_scalar(self, values, unit):
+        # todo: check, if this test is OK
         v = Variable([], values)
         assert v.dtype == np.dtype(f"datetime64[{unit}]")
         assert np.issubdtype(v.values, "datetime64")
@@ -1103,14 +1099,8 @@ class TestVariable(VariableSubclassobjects):
     )
     def test_timedelta64_conversion_scalar(self, values, unit):
         # todo: discussion needed
-        # expected = np.timedelta64(24 * 60 * 60 * 10**9, "ns")
-        # for values in [
-        #     np.timedelta64(1, "D"),
-        #     pd.Timedelta("1 day"),
-        #     timedelta(days=1),
-        # ]:
+        # todo: check, if this test is OK
         v = Variable([], values)
-        print("0:", v, v.values, values)
         assert v.dtype == np.dtype(f"timedelta64[{unit}]")
         assert np.issubdtype(v.values, "timedelta64")
         assert v.values.dtype == np.dtype(f"timedelta64[{unit}]")
@@ -1125,6 +1115,7 @@ class TestVariable(VariableSubclassobjects):
         assert v.values == "foo".encode("ascii")
 
     def test_0d_datetime(self):
+        # todo: check, if this test is OK
         v = Variable([], pd.Timestamp("2000-01-01"))
         assert v.dtype == np.dtype("datetime64[s]")
         assert v.values == np.datetime64("2000-01-01", "s")
@@ -1134,8 +1125,8 @@ class TestVariable(VariableSubclassobjects):
         "values, unit", [(pd.to_timedelta("1s"), "ns"), (np.timedelta64(1, "s"), "s")]
     )
     def test_0d_timedelta(self, values, unit):
+        # todo: check, if this test is OK
         v = Variable([], values)
-        print("0:", v, values, v.values)
         assert v.dtype == np.dtype(f"timedelta64[{unit}]")
         assert v.values == np.timedelta64(10**9, "ns")
 
@@ -2641,6 +2632,7 @@ class TestAsCompatibleData(Generic[T_DuckArray]):
 
     @pytest.mark.filterwarnings("ignore:Converting non-default")
     def test_datetime(self):
+        # todo: check, if this test is OK
         expected = np.datetime64("2000-01-01")
         actual = as_compatible_data(expected)
         assert expected == actual
@@ -2667,6 +2659,7 @@ class TestAsCompatibleData(Generic[T_DuckArray]):
         assert np.dtype("datetime64[ns]") == actual.dtype
 
     def test_tz_datetime(self) -> None:
+        # todo: check, if this test is OK
         tz = pytz.timezone("America/New_York")
         times_ns = pd.date_range("2000", periods=1, tz=tz)
 
@@ -2979,17 +2972,10 @@ class TestNumpyCoercion:
     ids=lambda x: f"{x}",
 )
 def test_datetime_conversion_warning(values, unit) -> None:
-    # todo: needs dioscussion
+    # todo: needs discussion
+    # todo: check, if this test is OK
     dims = ["time"] if isinstance(values, np.ndarray | pd.Index | pd.Series) else []
     var = Variable(dims, values)
-    # if warns:
-    #    with pytest.warns(UserWarning, match="non-default precision datetime"):
-    #
-    # else:
-    #    with warnings.catch_warnings():
-    #        warnings.simplefilter("error")
-    #        var = Variable(dims, values)
-
     if var.dtype.kind == "M":
         assert var.dtype == np.dtype(f"datetime64[{unit}]")
     else:
@@ -3029,7 +3015,7 @@ tz_ny = pytz.timezone("America/New_York")
 def test_pandas_two_only_datetime_conversion_warnings(
     data: pd.DatetimeIndex | pd.Series, dtype: str | pd.DatetimeTZDtype
 ) -> None:
-    # with pytest.warns(UserWarning, match="non-default precision datetime"):
+    # todo: check, if this test is OK
     var = Variable(["time"], data.astype(dtype))  # type: ignore[arg-type]
 
     if var.dtype.kind == "M":
@@ -3057,16 +3043,9 @@ def test_pandas_two_only_datetime_conversion_warnings(
 )
 def test_timedelta_conversion_warning(values, unit) -> None:
     # todo: needs discussion
+    # todo: check, if this test is OK
     dims = ["time"] if isinstance(values, np.ndarray | pd.Index) else []
     var = Variable(dims, values)
-    # if warns:
-    #    with pytest.warns(UserWarning, match="non-default precision timedelta"):
-
-    # else:
-    #    with warnings.catch_warnings():
-    #        warnings.simplefilter("error")
-    #        var = Variable(dims, values)
-
     assert var.dtype == np.dtype(f"timedelta64[{unit}]")
 
 
@@ -3075,7 +3054,6 @@ def test_pandas_two_only_timedelta_conversion_warning() -> None:
     # Note this test relies on a pandas feature that is only present in pandas
     # 2.0.0 and above, and so for now cannot be parametrized.
     data = pd.timedelta_range("1", periods=1).astype("timedelta64[s]")
-    # with pytest.warns(UserWarning, match="non-default precision timedelta"):
     var = Variable(["time"], data)
 
     assert var.dtype == np.dtype("timedelta64[s]")
@@ -3092,6 +3070,5 @@ def test_pandas_two_only_timedelta_conversion_warning() -> None:
 def test_pandas_indexing_adapter_non_nanosecond_conversion(index, dtype) -> None:
     # todo: test still needed?
     data = PandasIndexingAdapter(index.astype(f"{dtype}[s]"))
-    # with pytest.warns(UserWarning, match="non-default precision"):
     var = Variable(["time"], data)
     assert var.dtype == np.dtype(f"{dtype}[s]")

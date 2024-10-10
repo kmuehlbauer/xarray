@@ -410,9 +410,7 @@ class DatasetIOBase:
 
     def test_roundtrip_test_data(self) -> None:
         expected = create_test_data()
-        print("0:", expected)
         with self.roundtrip(expected) as actual:
-            print("1:", actual)
             self.check_dtypes_roundtripped(expected, actual)
             assert_identical(expected, actual)
 
@@ -606,12 +604,10 @@ class DatasetIOBase:
                     assert actual.t.encoding["calendar"] == expected_calendar
 
     def test_roundtrip_timedelta_data(self) -> None:
+        # todo: check, if default unit "s" is enough
         time_deltas = pd.to_timedelta(["1h", "2h", "NaT"]).as_unit("s")  # type: ignore[arg-type, unused-ignore]
-        print("0:", time_deltas, time_deltas[0].unit, time_deltas[0])
         expected = Dataset({"td": ("td", time_deltas), "td0": time_deltas[0]})
-        print("0:", expected.td, expected.td0)
         with self.roundtrip(expected) as actual:
-            print("1:", actual)
             assert_identical(expected, actual)
 
     def test_roundtrip_float64_data(self) -> None:
@@ -1594,6 +1590,7 @@ class NetCDF4Base(NetCDFBase):
 
             expected = Dataset()
 
+            # todo: check, if specifying "s" is enough
             time = pd.date_range("1999-01-05", periods=10, unit="s")
             encoding = {"units": units, "dtype": np.dtype("int32")}
             expected["time"] = ("time", time, {}, encoding)
@@ -5395,6 +5392,7 @@ def test_use_cftime_standard_calendar_default_in_range(calendar) -> None:
 def test_use_cftime_standard_calendar_default_out_of_range(
     calendar, units_year
 ) -> None:
+    # todo: check, if we still need to test for two dates
     import cftime
 
     x = [0, 1]
@@ -5486,6 +5484,7 @@ def test_use_cftime_false_standard_calendar_in_range(calendar) -> None:
 @pytest.mark.parametrize("calendar", ["standard", "gregorian"])
 @pytest.mark.parametrize("units_year", [1500, 1582])
 def test_use_cftime_false_standard_calendar_out_of_range(calendar, units_year) -> None:
+    # todo: check, if we still need to check for two dates
     x = [0, 1]
     time = [0, 720]
     units = f"days since {units_year}-01-01"
