@@ -582,7 +582,6 @@ def cftime_to_nptime(times, raise_on_invalid: bool = True) -> np.ndarray:
     If raise_on_invalid is True (default), invalid dates trigger a ValueError.
     Otherwise, the invalid element is replaced by np.NaT."""
     times = np.asarray(times)
-    # new = np.empty(times.shape, dtype=f"M8[{_get_datetime_resolution()}]")
     new = []
     dt: pd.Timestamp | Literal["NaT"]
     for _i, t in np.ndenumerate(times):
