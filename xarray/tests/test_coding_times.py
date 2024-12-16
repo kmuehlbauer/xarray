@@ -349,6 +349,7 @@ def test_decode_standard_calendar_multidim_time_inside_timestamp_range(
     times2 = pd.date_range("2001-05-01", end="2001-05-05", freq="D")
     time1 = cftime.date2num(times1.to_pydatetime(), units, calendar=calendar)
     time2 = cftime.date2num(times2.to_pydatetime(), units, calendar=calendar)
+    print(time1, time2)
     mdim_time = np.empty((len(time1), 2))
     mdim_time[:, 0] = time1
     mdim_time[:, 1] = time2
@@ -359,6 +360,7 @@ def test_decode_standard_calendar_multidim_time_inside_timestamp_range(
     actual = decode_cf_datetime(
         mdim_time, units, calendar=calendar, time_unit=time_unit
     )
+    print(actual)
     assert actual.dtype == np.dtype(f"=M8[{time_unit}]")
 
     abs_diff1 = abs(actual[:, 0] - expected1)
