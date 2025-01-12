@@ -610,7 +610,7 @@ def decode_cf_timedelta(
     num_timedeltas, units: str, time_unit: str = "ns"
 ) -> np.ndarray:
     """Given an array of numeric timedeltas in netCDF format, convert it into a
-    numpy timedelta64 {"s", "ms", "us", "ns"} array.
+    numpy timedelta64 ["s", "ms", "us", "ns"] array.
     """
     num_timedeltas = np.asarray(num_timedeltas)
     unit = _netcdf_to_numpy_timeunit(units)
