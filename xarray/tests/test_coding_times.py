@@ -34,7 +34,6 @@ from xarray.coding.times import (
     format_cftime_datetime,
     infer_datetime_units,
     infer_timedelta_units,
-    to_timedelta_unboxed,
 )
 from xarray.coding.variables import SerializationWarning
 from xarray.conventions import _update_bounds_attributes, cf_encoder
@@ -635,7 +634,7 @@ def test_cf_timedelta(timedeltas, units, numbers) -> None:
     if timedeltas == "NaT":
         timedeltas = np.timedelta64("NaT", "ns")
     else:
-        timedeltas = to_timedelta_unboxed(timedeltas)
+        timedeltas = pd.to_timedelta(timedeltas).to_numpy()
     numbers = np.array(numbers)
 
     expected = numbers
@@ -659,7 +658,7 @@ def test_cf_timedelta_2d() -> None:
     units = "days"
     numbers = np.atleast_2d([1, 2, 3])
 
-    timedeltas = np.atleast_2d(to_timedelta_unboxed(["1D", "2D", "3D"]))
+    timedeltas = np.atleast_2d(pd.to_timedelta(["1D", "2D", "3D"]).to_numpy())
     expected = timedeltas
 
     actual = decode_cf_timedelta(numbers, units)

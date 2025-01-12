@@ -542,19 +542,6 @@ def decode_cf_datetime(
     return reshape(dates, num_dates.shape)
 
 
-def to_timedelta_unboxed(value, **kwargs):
-    # todo: check, if the procedure here is correct
-    result = pd.to_timedelta(value, **kwargs).to_numpy()
-    unique_timedeltas = np.unique(result[pd.notnull(result)])
-    unit = _netcdf_to_numpy_timeunit(_infer_time_units_from_diff(unique_timedeltas))
-    if unit not in {"s", "ms", "us", "ns"}:
-        # default to "ns", when not specified
-        unit = "ns"
-    result = result.astype(f"timedelta64[{unit}]")
-    assert np.issubdtype(result.dtype, "timedelta64")
-    return result
-
-
 def to_datetime_unboxed(value, **kwargs):
     result = pd.to_datetime(value, **kwargs).to_numpy()
     assert np.issubdtype(result.dtype, "datetime64")
@@ -604,21 +591,22 @@ def _numbers_to_timedelta(
     return flat_num.astype(f"timedelta64[{time_unit}]")
 
 
-def decode_cf_timedelta(num_timedeltas, units: str) -> np.ndarray:
-    # todo: check, if this works as intended
+def decode_cf_timedelta(
+    num_timedeltas, units: str, time_unit: str = "ns"
+) -> np.ndarray:
     """Given an array of numeric timedeltas in netCDF format, convert it into a
-    numpy timedelta64 ["s", "ms", "us", "ns"] array.
+    numpy timedelta64[ns] array.
     """
+    # TODO: add a time_unit argument to enable modifying the decoding
+    # resolution analogous to decode_cf_datetime. Currently we only support
+    # decoding to "ns" resolution.
+    time_unit = "ns"
     num_timedeltas = np.asarray(num_timedeltas)
     unit = _netcdf_to_numpy_timeunit(units)
 
     timedeltas = _numbers_to_timedelta(num_timedeltas, unit, "s", "timedelta")
 
-    as_unit = unit
-    if unit not in {"s", "ms", "us", "ns"}:
-        # default to "ns", when not specified
-        as_unit = "ns"
-    result = pd.to_timedelta(ravel(timedeltas)).as_unit(as_unit).to_numpy()
+    result = pd.to_timedelta(ravel(timedeltas)).as_unit(time_unit).to_numpy()
     return reshape(result, timedeltas.shape)
 
 
@@ -700,7 +688,7 @@ def infer_timedelta_units(deltas) -> str:
     {'days', 'hours', 'minutes' 'seconds'} (the first one that can evenly
     divide all unique time deltas in `deltas`)
     """
-    deltas = to_timedelta_unboxed(ravel(np.asarray(deltas)))
+    deltas = ravel(deltas)
     unique_timedeltas = np.unique(deltas[pd.notnull(deltas)])
     return _infer_time_units_from_diff(unique_timedeltas)
 
