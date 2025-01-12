@@ -631,10 +631,11 @@ def test_infer_cftime_datetime_units(calendar, date_args, expected) -> None:
     ],
 )
 def test_cf_timedelta(timedeltas, units, numbers) -> None:
+    time_unit = "ns"
     if timedeltas == "NaT":
-        timedeltas = np.timedelta64("NaT", "ns")
+        timedeltas = np.timedelta64("NaT", time_unit)
     else:
-        timedeltas = pd.to_timedelta(timedeltas).to_numpy()
+        timedeltas = pd.to_timedelta(timedeltas).as_unit(time_unit).to_numpy()
     numbers = np.array(numbers)
 
     expected = numbers
@@ -644,12 +645,12 @@ def test_cf_timedelta(timedeltas, units, numbers) -> None:
 
     if units is not None:
         expected = timedeltas
-        actual = decode_cf_timedelta(numbers, units)
+        actual = decode_cf_timedelta(numbers, units, time_unit)
         assert_array_equal(expected, actual)
         assert expected.dtype == actual.dtype
 
-    expected = np.timedelta64("NaT", "ns")
-    actual = decode_cf_timedelta(np.array(np.nan), "days")
+    expected = np.timedelta64("NaT", time_unit)
+    actual = decode_cf_timedelta(np.array(np.nan), "days", time_unit)
     assert_array_equal(expected, actual)
     assert expected.dtype == actual.dtype
 
@@ -664,6 +665,38 @@ def test_cf_timedelta_2d() -> None:
     actual = decode_cf_timedelta(numbers, units)
     assert_array_equal(expected, actual)
     assert expected.dtype == actual.dtype
+
+
+@pytest.mark.parametrize("encoding_unit", FREQUENCIES_TO_ENCODING_UNITS.values())
+def test_decode_cf_timedelta_time_unit(time_unit, encoding_unit) -> None:
+    encoded = 1
+    encoding_unit_as_numpy = _netcdf_to_numpy_timeunit(encoding_unit)
+    if np.timedelta64(1, time_unit) > np.timedelta64(1, encoding_unit_as_numpy):
+        expected = np.timedelta64(encoded, encoding_unit_as_numpy)
+    else:
+        expected = np.timedelta64(encoded, encoding_unit_as_numpy).astype(
+            f"timedelta64[{time_unit}]"
+        )
+    result = decode_cf_timedelta(encoded, encoding_unit, time_unit)
+    assert result == expected
+    assert result.dtype == expected.dtype
+
+
+def test_decode_cf_timedelta_time_unit_out_of_bounds(time_unit):
+    # Define a scale factor that will guarantee overflow with the given
+    # time_unit.
+    scale_factor = np.timedelta64(1, time_unit) // np.timedelta64(1, "ns")
+    encoded = scale_factor * 300 * 365
+    with pytest.raises(OutOfBoundsTimedelta):
+        decode_cf_timedelta(encoded, "days", time_unit)
+
+
+def test_cf_timedelta_roundtrip_large_value(time_unit):
+    value = np.timedelta64(np.iinfo(np.int64).max, time_unit)
+    encoded, units = encode_cf_timedelta(value)
+    decoded = decode_cf_timedelta(encoded, units, time_unit=time_unit)
+    assert value == decoded
+    assert value.dtype == decoded.dtype
 
 
 @pytest.mark.parametrize(
