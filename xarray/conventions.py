@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar, Union
 
 import numpy as np
 
-from xarray.coders import CFDatetimeCoder
-from xarray.coding import strings, times, variables
+from xarray.coders import CFDatetimeCoder, CFTimedeltaCoder
+from xarray.coding import strings, variables
 from xarray.coding.variables import SerializationWarning, pop_to
 from xarray.core import indexing
 from xarray.core.common import (
@@ -90,7 +90,7 @@ def encode_cf_variable(
 
     for coder in [
         CFDatetimeCoder(),
-        times.CFTimedeltaCoder(),
+        CFTimedeltaCoder(),
         variables.CFScaleOffsetCoder(),
         variables.CFMaskCoder(),
         variables.NativeEnumCoder(),
@@ -114,7 +114,7 @@ def decode_cf_variable(
     decode_endianness: bool = True,
     stack_char_dim: bool = True,
     use_cftime: bool | None = None,
-    decode_timedelta: bool | None = None,
+    decode_timedelta: bool | CFTimedeltaCoder | None = None,
 ) -> Variable:
     """
     Decodes a variable which may hold CF encoded information.
@@ -158,6 +158,8 @@ def decode_cf_variable(
 
         .. deprecated:: 2025.01.1
            Please pass a :py:class:`coders.CFDatetimeCoder` instance initialized with ``use_cftime`` to the ``decode_times`` kwarg instead.
+    decode_timedelta : bool or CFTimedeltaCoder, optional
+        Decode cf timedelta ("hours") to np.timedelta64.
 
     Returns
     -------
@@ -171,7 +173,13 @@ def decode_cf_variable(
     original_dtype = var.dtype
 
     if decode_timedelta is None:
-        decode_timedelta = True if decode_times else False
+        if decode_times:
+            time_unit = "ns"
+            if isinstance(decode_times, CFDatetimeCoder):
+                time_unit = decode_times.time_unit
+            decode_timedelta = CFTimedeltaCoder(time_unit=time_unit)
+        else:
+            decode_timedelta = False
 
     if concat_characters:
         if stack_char_dim:
@@ -193,7 +201,9 @@ def decode_cf_variable(
             var = coder.decode(var, name=name)
 
     if decode_timedelta:
-        var = times.CFTimedeltaCoder().decode(var, name=name)
+        if not isinstance(decode_times, CFDatetimeCoder):
+            decode_timedelta = CFTimedeltaCoder()
+        var = decode_timedelta.decode(var, name=name)
     if decode_times:
         # remove checks after end of deprecation cycle
         if not isinstance(decode_times, CFDatetimeCoder):
@@ -335,7 +345,10 @@ def decode_cf_variables(
     decode_coords: bool | Literal["coordinates", "all"] = True,
     drop_variables: T_DropVariables = None,
     use_cftime: bool | Mapping[str, bool] | None = None,
-    decode_timedelta: bool | Mapping[str, bool] | None = None,
+    decode_timedelta: bool
+    | CFTimedeltaCoder
+    | Mapping[str, bool | CFTimedeltaCoder]
+    | None = None,
 ) -> tuple[T_Variables, T_Attrs, set[Hashable]]:
     """
     Decode several CF encoded variables.
@@ -472,7 +485,7 @@ def decode_cf(
     decode_coords: bool | Literal["coordinates", "all"] = True,
     drop_variables: T_DropVariables = None,
     use_cftime: bool | None = None,
-    decode_timedelta: bool | None = None,
+    decode_timedelta: bool | CFTimedeltaCoder | None = None,
 ) -> Dataset:
     """Decode the given Dataset or Datastore according to CF conventions into
     a new Dataset.
@@ -516,7 +529,7 @@ def decode_cf(
         .. deprecated:: 2025.01.1
            Please pass a :py:class:`coders.CFDatetimeCoder` instance initialized with ``use_cftime`` to the ``decode_times`` kwarg instead.
 
-    decode_timedelta : bool, optional
+    decode_timedelta : bool or CFDatetimeCoder, optional
         If True, decode variables and coordinates with time units in
         {"days", "hours", "minutes", "seconds", "milliseconds", "microseconds"}
         into timedelta objects. If False, leave them encoded as numbers.
