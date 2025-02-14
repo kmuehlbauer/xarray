@@ -3,10 +3,9 @@
 from collections import Counter
 
 import numpy as np
+from cf_codecs import decode_cf
+from cf_codecs.coders import CFDatetimeCoder, CFTimedeltaCoder
 
-from xarray.coders import CFDatetimeCoder
-from xarray.coding.times import CFTimedeltaCoder
-from xarray.conventions import decode_cf
 from xarray.core import duck_array_ops
 from xarray.core.dataarray import DataArray
 from xarray.core.dtypes import get_fill_value

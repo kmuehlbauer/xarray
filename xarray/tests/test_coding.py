@@ -5,10 +5,11 @@ from contextlib import suppress
 import numpy as np
 import pandas as pd
 import pytest
+from cf_codecs import conventions, decode_cf
+from cf_codecs.coding import variables
+from cf_codecs.conventions import decode_cf_variable, encode_cf_variable
 
 import xarray as xr
-from xarray.coding import variables
-from xarray.conventions import decode_cf_variable, encode_cf_variable
 from xarray.tests import assert_allclose, assert_equal, assert_identical, requires_dask
 
 with suppress(ImportError):
@@ -63,14 +64,14 @@ def test_CFMaskCoder_missing_value() -> None:
     )
     expected.attrs["missing_value"] = -9999
 
-    decoded = xr.decode_cf(expected.to_dataset())
-    encoded, _ = xr.conventions.cf_encoder(decoded.variables, decoded.attrs)
+    decoded = decode_cf(expected.to_dataset())
+    encoded, _ = conventions.cf_encoder(decoded.variables, decoded.attrs)
 
     assert_equal(encoded["tmpk"], expected.variable)
 
     decoded.tmpk.encoding["_FillValue"] = -9940
     with pytest.raises(ValueError):
-        encoded, _ = xr.conventions.cf_encoder(decoded.variables, decoded.attrs)
+        encoded, _ = conventions.cf_encoder(decoded.variables, decoded.attrs)
 
 
 @requires_dask

@@ -51,16 +51,16 @@ from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
-from packaging.version import Version
-
-from xarray.coding.cftimeindex import CFTimeIndex
-from xarray.coding.times import (
+from cf_codecs.coding.times import (
     _is_standard_calendar,
     _parse_iso8601,
     _should_cftime_be_used,
     convert_time_or_go_back,
     format_cftime_datetime,
 )
+from packaging.version import Version
+
+from xarray.coding.cftimeindex import CFTimeIndex
 from xarray.core.common import _contains_datetime_like_objects, is_np_datetime_like
 from xarray.core.pdcompat import (
     count_not_none,
@@ -1230,7 +1230,7 @@ def date_range(
     cftime_range
     date_range_like
     """
-    from xarray.coding.times import _is_standard_calendar
+    from cf_codecs.coding.times import _is_standard_calendar
 
     if tz is not None:
         use_cftime = False

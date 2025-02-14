@@ -23,8 +23,10 @@ from typing import (
 )
 
 import numpy as np
+from cf_codecs import conventions
+from cf_codecs.coders import CFDatetimeCoder, CFTimedeltaCoder
 
-from xarray import backends, conventions
+from xarray import backends
 from xarray.backends import plugins
 from xarray.backends.common import (
     AbstractDataStore,
@@ -33,7 +35,6 @@ from xarray.backends.common import (
     _normalize_path,
 )
 from xarray.backends.locks import _get_scheduler
-from xarray.coders import CFDatetimeCoder, CFTimedeltaCoder
 from xarray.core import indexing
 from xarray.core.combine import (
     _infer_concat_order_from_positions,
@@ -1958,6 +1959,7 @@ def dump_to_store(
     if encoding is None:
         encoding = {}
 
+    # SOCF: direct access to cf related encoding
     variables, attrs = conventions.encode_dataset_coordinates(dataset)
 
     check_encoding = set()
@@ -1967,6 +1969,7 @@ def dump_to_store(
         variables[k].encoding = enc
         check_encoding.add(k)
 
+    # SOCF: This isn't used within the code-base
     if encoder:
         variables, attrs = encoder(variables, attrs)
 

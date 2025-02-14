@@ -5,8 +5,7 @@ from __future__ import annotations
 from functools import partial
 
 import numpy as np
-
-from xarray.coding.variables import (
+from cf_codecs.coding.variables import (
     VariableCoder,
     lazy_elemwise_func,
     pop_to,
@@ -14,6 +13,7 @@ from xarray.coding.variables import (
     unpack_for_decoding,
     unpack_for_encoding,
 )
+
 from xarray.core import indexing
 from xarray.core.utils import module_available
 from xarray.core.variable import Variable

@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import pandas as pd
+from cf_codecs import conventions
 
-from xarray import coding, conventions
+from xarray import coding
 from xarray.backends.common import (
     BACKEND_ENTRYPOINTS,
     AbstractWritableDataStore,
@@ -506,7 +507,7 @@ def encode_zarr_variable(var, needs_copy=True, name=None):
     out : Variable
         A variable which has been encoded as described above.
     """
-
+    # SOCF: special handling CF encoding for zarr here!
     var = conventions.encode_cf_variable(var, name=name)
     var = ensure_dtype_not_object(var, name=name)
 

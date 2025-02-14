@@ -47,14 +47,14 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 import pandas as pd
-from packaging.version import Version
-
-from xarray.coding.times import (
+from cf_codecs.coding.times import (
     _STANDARD_CALENDARS,
     _parse_iso8601,
     cftime_to_nptime,
     infer_calendar_name,
 )
+from packaging.version import Version
+
 from xarray.core.common import _contains_cftime_datetimes
 from xarray.core.options import OPTIONS
 from xarray.core.types import PDDatetimeUnitOptions
@@ -683,7 +683,7 @@ class CFTimeIndex(pd.Index):
     @property
     def calendar(self):
         """The calendar used by the datetimes in the index."""
-        from xarray.coding.times import infer_calendar_name
+        from cf_codecs.coding.times import infer_calendar_name
 
         if not self._data.size:
             return None

@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, Union, overload
 
 import numpy as np
 import pandas as pd
+from cf_codecs.coding import variables
+from cf_codecs.coding.variables import SerializationWarning
+from cf_codecs.conventions import cf_encoder
 
-from xarray.coding import strings, variables
-from xarray.coding.variables import SerializationWarning
-from xarray.conventions import cf_encoder
+from xarray.coding import strings
 from xarray.core import indexing
 from xarray.core.datatree import DataTree, Variable
 from xarray.core.types import ReadBuffer
@@ -635,6 +636,8 @@ class WritableCFDataStore(AbstractWritableDataStore):
     def encode(self, variables, attributes):
         # All NetCDF files get CF encoded by default, without this attempting
         # to write times, for example, would fail.
+        # SOCF: this calls cf_codecs.conventions.cf_encoder
+        #  here all CF related encoding is called
         variables, attributes = cf_encoder(variables, attributes)
         variables = {
             k: ensure_dtype_not_object(v, name=k) for k, v in variables.items()

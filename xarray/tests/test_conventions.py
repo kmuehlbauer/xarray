@@ -6,20 +6,18 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
+from cf_codecs import SerializationWarning, conventions, decode_cf
+from cf_codecs.coders import CFDatetimeCoder, CFTimedeltaCoder
 
 from xarray import (
     Dataset,
-    SerializationWarning,
     Variable,
     cftime_range,
     coding,
-    conventions,
     open_dataset,
 )
 from xarray.backends.common import WritableCFDataStore
 from xarray.backends.memory import InMemoryDataStore
-from xarray.coders import CFDatetimeCoder, CFTimedeltaCoder
-from xarray.conventions import decode_cf
 from xarray.testing import assert_identical
 from xarray.tests import (
     assert_array_equal,

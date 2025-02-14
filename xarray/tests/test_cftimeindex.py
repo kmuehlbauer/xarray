@@ -7,6 +7,10 @@ from textwrap import dedent
 import numpy as np
 import pandas as pd
 import pytest
+from cf_codecs.coding.times import (
+    _parse_iso8601,
+    parse_iso8601_like,
+)
 
 import xarray as xr
 from xarray.coding.cftimeindex import (
@@ -14,10 +18,6 @@ from xarray.coding.cftimeindex import (
     _parse_array_of_cftime_strings,
     _parsed_string_to_bounds,
     assert_all_valid_date_type,
-)
-from xarray.coding.times import (
-    _parse_iso8601,
-    parse_iso8601_like,
 )
 from xarray.core.types import PDDatetimeUnitOptions
 from xarray.tests import (

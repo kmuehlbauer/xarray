@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, Generic
 
 import numpy as np
 import pandas as pd
+from cf_codecs.coding.times import infer_calendar_name
 
 from xarray.coding.calendar_ops import _decimal_year
-from xarray.coding.times import infer_calendar_name
 from xarray.core import duck_array_ops
 from xarray.core.common import (
     _contains_datetime_like_objects,

@@ -19,6 +19,8 @@ try:
 except ImportError:
     from numpy import RankWarning  # type: ignore[no-redef,attr-defined,unused-ignore]
 
+from cf_codecs.coders import CFDatetimeCoder
+
 import xarray as xr
 import xarray.core.missing
 from xarray import (
@@ -30,7 +32,6 @@ from xarray import (
     broadcast,
     set_options,
 )
-from xarray.coders import CFDatetimeCoder
 from xarray.core import dtypes
 from xarray.core.common import full_like
 from xarray.core.coordinates import Coordinates

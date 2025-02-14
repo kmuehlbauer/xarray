@@ -8,20 +8,10 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 import pytest
-from pandas.errors import OutOfBoundsDatetime, OutOfBoundsTimedelta
-
-from xarray import (
-    DataArray,
-    Dataset,
-    Variable,
-    cftime_range,
-    conventions,
-    date_range,
-    decode_cf,
-)
-from xarray.coders import CFDatetimeCoder, CFTimedeltaCoder
-from xarray.coding.times import _STANDARD_CALENDARS as _STANDARD_CALENDARS_UNSORTED
-from xarray.coding.times import (
+from cf_codecs import conventions, decode_cf
+from cf_codecs.coders import CFDatetimeCoder, CFTimedeltaCoder
+from cf_codecs.coding.times import _STANDARD_CALENDARS as _STANDARD_CALENDARS_UNSORTED
+from cf_codecs.coding.times import (
     _encode_datetime_with_cftime,
     _netcdf_to_numpy_timeunit,
     _numpy_to_netcdf_timeunit,
@@ -35,8 +25,17 @@ from xarray.coding.times import (
     infer_datetime_units,
     infer_timedelta_units,
 )
-from xarray.coding.variables import SerializationWarning
-from xarray.conventions import _update_bounds_attributes, cf_encoder
+from cf_codecs.coding.variables import SerializationWarning
+from cf_codecs.conventions import _update_bounds_attributes, cf_encoder
+from pandas.errors import OutOfBoundsDatetime, OutOfBoundsTimedelta
+
+from xarray import (
+    DataArray,
+    Dataset,
+    Variable,
+    cftime_range,
+    date_range,
+)
 from xarray.core.common import contains_cftime_datetimes
 from xarray.core.types import PDDatetimeUnitOptions
 from xarray.core.utils import is_duck_dask_array

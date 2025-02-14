@@ -21,9 +21,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from unittest.mock import patch
 
+import cf_codecs
 import numpy as np
 import pandas as pd
 import pytest
+from cf_codecs.coders import CFDatetimeCoder, CFTimedeltaCoder
+from cf_codecs.coding.variables import SerializationWarning
+from cf_codecs.conventions import encode_dataset_coordinates
 from packaging.version import Version
 from pandas.errors import OutOfBoundsDatetime
 
@@ -49,11 +53,8 @@ from xarray.backends.netCDF4_ import (
 from xarray.backends.pydap_ import PydapDataStore
 from xarray.backends.scipy_ import ScipyBackendEntrypoint
 from xarray.backends.zarr import ZarrStore
-from xarray.coders import CFDatetimeCoder, CFTimedeltaCoder
 from xarray.coding.cftime_offsets import cftime_range
 from xarray.coding.strings import check_vlen_dtype, create_vlen_dtype
-from xarray.coding.variables import SerializationWarning
-from xarray.conventions import encode_dataset_coordinates
 from xarray.core import indexing
 from xarray.core.options import set_options
 from xarray.core.utils import module_available
@@ -3247,7 +3248,7 @@ class ZarrBase(CFEncodedBase):
             ds_b = xr.open_zarr(
                 store_target, decode_times=decoder, **self.version_kwargs
             )
-            assert xr.coding.times.contains_cftime_datetimes(ds_b.time.variable)
+            assert cf_codecs.coding.times.contains_cftime_datetimes(ds_b.time.variable)
 
     def test_write_read_select_write(self) -> None:
         # Test for https://github.com/pydata/xarray/issues/4084

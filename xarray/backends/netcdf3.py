@@ -3,8 +3,9 @@ from __future__ import annotations
 import unicodedata
 
 import numpy as np
+from cf_codecs import coding as cf_coding
 
-from xarray import coding
+from xarray import coding as xr_coding
 from xarray.core.variable import Variable
 
 # Special characters that are permitted in netCDF names except in the
@@ -112,7 +113,7 @@ def _maybe_prepare_times(var):
     if data.dtype.kind in "iu":
         units = var.attrs.get("units", None)
         if units is not None:
-            if coding.variables._is_time_like(units):
+            if cf_coding.variables._is_time_like(units):
                 mask = data == np.iinfo(np.int64).min
                 if mask.any():
                     data = np.where(mask, var.attrs.get("_FillValue", np.nan), data)
@@ -121,8 +122,8 @@ def _maybe_prepare_times(var):
 
 def encode_nc3_variable(var):
     for coder in [
-        coding.strings.EncodedStringCoder(allows_unicode=False),
-        coding.strings.CharacterArrayCoder(),
+        xr_coding.strings.EncodedStringCoder(allows_unicode=False),
+        xr_coding.strings.CharacterArrayCoder(),
     ]:
         var = coder.encode(var)
     data = _maybe_prepare_times(var)

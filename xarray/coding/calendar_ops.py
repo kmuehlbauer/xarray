@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
-from xarray.coding.cftime_offsets import date_range_like, get_date_type
-from xarray.coding.cftimeindex import CFTimeIndex
-from xarray.coding.times import (
+from cf_codecs.coding.times import (
     _should_cftime_be_used,
     convert_times,
 )
+
+from xarray.coding.cftime_offsets import date_range_like, get_date_type
+from xarray.coding.cftimeindex import CFTimeIndex
 from xarray.core.common import (
     _contains_datetime_like_objects,
     full_like,

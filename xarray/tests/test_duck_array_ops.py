@@ -6,10 +6,10 @@ import warnings
 import numpy as np
 import pandas as pd
 import pytest
+from cf_codecs.coding.times import _NS_PER_TIME_DELTA
 from numpy import array, nan
 
 from xarray import DataArray, Dataset, cftime_range, concat
-from xarray.coding.times import _NS_PER_TIME_DELTA
 from xarray.core import dtypes, duck_array_ops
 from xarray.core.duck_array_ops import (
     array_notnull_equiv,
