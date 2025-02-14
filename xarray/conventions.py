@@ -89,6 +89,7 @@ def encode_cf_variable(
     """
     ensure_not_multiindex(var, name=name)
 
+    # SOCF: we unconditionally call the coders in this explicit order
     for coder in [
         CFDatetimeCoder(),
         CFTimedeltaCoder(),
@@ -168,11 +169,16 @@ def decode_cf_variable(
         A variable holding the decoded equivalent of var.
     """
     # Ensure datetime-like Variables are passed through unmodified (GH 6453)
+    # SOCF: Prevents decoding of datetime64/timedelta64
+    #   This would happen below when adding original dtype
     if _contains_datetime_like_objects(var):
         return var
 
+    # SOFC: keep original dtype
     original_dtype = var.dtype
 
+    # SOFC: This is no CF feature but closely attached to CF datetime decoding
+    #  here we handle how timedelta decoding is treated depending on the kwarg
     decode_timedelta_was_none = decode_timedelta is None
     if decode_timedelta is None:
         if isinstance(decode_times, CFDatetimeCoder):
@@ -181,17 +187,35 @@ def decode_cf_variable(
             decode_timedelta = True if decode_times else False
 
     if concat_characters:
+        # SOCF: CF Feature for storing n-dimensional arrays of strings
+        #  if stored as char (n+1-dimensional) it is decoded as string
+        #  and the dimension is preserved in encoding
         if stack_char_dim:
             var = strings.CharacterArrayCoder().decode(var, name=name)
+        # SOFC: No CF Feature but recommended to store actual encoding
+        #  in _Encoding attribute when text is stored in a char variable
         var = strings.EncodedStringCoder().decode(var)
 
+    # SOFC: This is no CF feature but NetCDF4/HDF5 detail
+    #  changes original_dtype
     if original_dtype.kind == "O":
         var = variables.ObjectVLenStringCoder().decode(var)
         original_dtype = var.dtype
 
+    # SOFC: This is no CF feature but Numpy detail
+    #  recodes numpy StringDType to object for backwards compatibility
     if original_dtype.kind == "T":
         var = variables.Numpy2StringDTypeCoder().decode(var)
 
+    # SOFC: Combination of handling CF "Missing data" and "Packed Data"
+    #  First, data is masked, which means it is converted to internal float
+    #   representation with np.nan representing missing data.
+    #   For dtypes which implement NaN (like np.datetime64/np.timedelta64
+    #   their native dtype is kept.
+    #  Second, data is unpacked, which means data is converted according
+    #   attributes "scale_factor" and "add_offset
+    #  As netcdf-c and netCDF4-python can handle those separately, xarray should
+    #  implement that, too.
     if mask_and_scale:
         dec_times = True if decode_times else False
         dec_timedelta = True if decode_timedelta else False
@@ -205,6 +229,8 @@ def decode_cf_variable(
         ]:
             var = coder.decode(var, name=name)
 
+    # SOCF: Non CF (but closely related) decoding of timedeltas according
+    #  attribute "units"
     if decode_timedelta:
         if not isinstance(decode_timedelta, CFTimedeltaCoder):
             decode_timedelta = CFTimedeltaCoder()
@@ -212,6 +238,9 @@ def decode_cf_variable(
             decode_timedelta_was_none
         )
         var = decode_timedelta.decode(var, name=name)
+
+    # SOCF: CF feature decoding datetimes according attributes "units",
+    #  "calendar" and new "units_metadata" (not implemented yet)
     if decode_times:
         # remove checks after end of deprecation cycle
         if not isinstance(decode_times, CFDatetimeCoder):
@@ -239,14 +268,18 @@ def decode_cf_variable(
                 )
         var = decode_times.decode(var, name=name)
 
+    # SOCF: No CF Feature but NetCDF3 related, recodes big endian data into
+    #  native endianess
     if decode_endianness and not var.dtype.isnative:
         var = variables.EndianCoder().decode(var)
         original_dtype = var.dtype
 
+    # SOFC: No CF Feature but xarray way of signaling boolean data
     var = variables.BooleanCoder().decode(var)
 
     dimensions, data, attributes, encoding = variables.unpack_for_decoding(var)
 
+    # SOCF: preserve original dtype in encoding in any case
     encoding.setdefault("dtype", original_dtype)
 
     if not is_duck_dask_array(data):
@@ -390,6 +423,7 @@ def decode_cf_variables(
     drop_variables = set(drop_variables)
 
     # Time bounds coordinates might miss the decoding attributes
+    # SOCF: CF Feature, needed internally to properly decode time bounds
     if decode_times:
         _update_bounds_attributes(variables)
 
@@ -397,6 +431,7 @@ def decode_cf_variables(
     for k, v in variables.items():
         if k in drop_variables:
             continue
+        # SOCF: check, if dimensions should be stacked
         stack_char_dim = (
             _item_or_default(concat_characters, k, True)
             and v.dtype == "S1"
@@ -404,6 +439,7 @@ def decode_cf_variables(
             and stackable(v.dims[-1])
         )
         try:
+            # SOCF: decode single variables
             new_vars[k] = decode_cf_variable(
                 k,
                 v,
