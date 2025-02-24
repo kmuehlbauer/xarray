@@ -395,7 +395,7 @@ class TestDataset:
             <xarray.Dataset> Size: 12B
             Dimensions:  (foø: 1)
             Coordinates:
-              * foø      (foø) {byteorder}U3 12B {'ba®'!r}
+              * foø      (foø) {byteorder}U3 12B {"ba®"!r}
             Data variables:
                 *empty*
             Attributes:
@@ -1592,6 +1592,40 @@ class TestDataset:
         actual = ds.isel(x=idxr)
         assert "x" not in actual.xindexes
         assert not isinstance(actual.x.variable, IndexVariable)
+
+    def test_isel_multicoord_index(self) -> None:
+        # regression test https://github.com/pydata/xarray/issues/10063
+        # isel on a multi-coordinate index should return a unique index associated
+        # to each coordinate
+        class MultiCoordIndex(xr.Index):
+            def __init__(self, idx1, idx2):
+                self.idx1 = idx1
+                self.idx2 = idx2
+
+            @classmethod
+            def from_variables(cls, variables, *, options=None):
+                idx1 = PandasIndex.from_variables(
+                    {"x": variables["x"]}, options=options
+                )
+                idx2 = PandasIndex.from_variables(
+                    {"y": variables["y"]}, options=options
+                )
+
+                return cls(idx1, idx2)
+
+            def create_variables(self, variables=None):
+                return {**self.idx1.create_variables(), **self.idx2.create_variables()}
+
+            def isel(self, indexers):
+                idx1 = self.idx1.isel({"x": indexers.get("x", slice(None))})
+                idx2 = self.idx2.isel({"y": indexers.get("y", slice(None))})
+                return MultiCoordIndex(idx1, idx2)
+
+        coords = xr.Coordinates(coords={"x": [0, 1], "y": [1, 2]}, indexes={})
+        ds = xr.Dataset(coords=coords).set_xindex(["x", "y"], MultiCoordIndex)
+
+        ds2 = ds.isel(x=slice(None), y=slice(None))
+        assert ds2.xindexes["x"] is ds2.xindexes["y"]
 
     def test_sel(self) -> None:
         data = create_test_data()
@@ -4317,8 +4351,13 @@ class TestDataset:
         ds = self.make_example_math_dataset()
         ds["x"] = np.arange(3)
         ds_copy = ds.copy()
-        ds_copy["bar"] = ds["bar"].to_pandas()
-
+        series = ds["bar"].to_pandas()
+        # to_pandas will actually give the result where the internal array of the series is a NumpyExtensionArray
+        # but ds["bar"] is a numpy array.
+        # TODO: should assert_equal be updated to handle?
+        assert (ds["bar"] == series).all()
+        del ds["bar"]
+        del ds_copy["bar"]
         assert_equal(ds, ds_copy)
 
     def test_setitem_auto_align(self) -> None:
@@ -4909,6 +4948,16 @@ class TestDataset:
         expected = pd.DataFrame([[]], index=idx)
         assert expected.equals(actual), (expected, actual)
 
+    def test_from_dataframe_categorical_dtype_index(self) -> None:
+        cat = pd.CategoricalIndex(list("abcd"))
+        df = pd.DataFrame({"f": [0, 1, 2, 3]}, index=cat)
+        ds = df.to_xarray()
+        restored = ds.to_dataframe()
+        df.index.name = (
+            "index"  # restored gets the name because it has the coord with the name
+        )
+        pd.testing.assert_frame_equal(df, restored)
+
     def test_from_dataframe_categorical_index(self) -> None:
         cat = pd.CategoricalDtype(
             categories=["foo", "bar", "baz", "qux", "quux", "corge"]
@@ -4933,7 +4982,7 @@ class TestDataset:
         )
         ser = pd.Series(1, index=cat)
         ds = ser.to_xarray()
-        assert ds.coords.dtypes["index"] == np.dtype("O")
+        assert ds.coords.dtypes["index"] == ser.index.dtype
 
     @requires_sparse
     def test_from_dataframe_sparse(self) -> None:
@@ -6685,11 +6734,15 @@ class TestDataset:
         assert len(out.data_vars) == 0
 
     def test_polyfit_weighted(self) -> None:
-        # Make sure weighted polyfit does not change the original object (issue #5644)
         ds = create_test_data(seed=1)
+        ds = ds.broadcast_like(ds)  # test more than 2 dimensions (issue #9972)
         ds_copy = ds.copy(deep=True)
 
-        ds.polyfit("dim2", 2, w=np.arange(ds.sizes["dim2"]))
+        expected = ds.polyfit("dim2", 2)
+        actual = ds.polyfit("dim2", 2, w=np.ones(ds.sizes["dim2"]))
+        xr.testing.assert_identical(expected, actual)
+
+        # Make sure weighted polyfit does not change the original object (issue #5644)
         xr.testing.assert_identical(ds, ds_copy)
 
     def test_polyfit_coord(self) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import datetime
 import warnings
 from collections.abc import (
@@ -522,6 +523,7 @@ class DataArray(
         variable: Variable | None = None,
         coords=None,
         name: Hashable | None | Default = _default,
+        attrs=_default,
         indexes=None,
     ) -> Self:
         if variable is None:
@@ -532,6 +534,11 @@ class DataArray(
             indexes = self._indexes
         if name is _default:
             name = self.name
+        if attrs is _default:
+            attrs = copy.copy(self.attrs)
+        else:
+            variable = variable.copy()
+            variable.attrs = attrs
         return type(self)(variable, coords, name=name, indexes=indexes, fastpath=True)
 
     def _replace_maybe_drop_dims(
@@ -886,7 +893,7 @@ class DataArray(
         return dict(zip(self.dims, key, strict=True))
 
     def _getitem_coord(self, key: Any) -> Self:
-        from xarray.core.dataset import _get_virtual_variable
+        from xarray.core.dataset_utils import _get_virtual_variable
 
         try:
             var = self._coords[key]
@@ -3512,8 +3519,7 @@ class DataArray(
         """
         if utils.is_dict_like(value):
             raise TypeError(
-                "cannot provide fill value as a dictionary with "
-                "fillna on a DataArray"
+                "cannot provide fill value as a dictionary with fillna on a DataArray"
             )
         out = ops.fillna(self, value)
         return out
@@ -4537,8 +4543,7 @@ class DataArray(
                 }
             except KeyError as e:
                 raise ValueError(
-                    "cannot convert dict when coords are missing the key "
-                    f"'{e.args[0]}'"
+                    f"cannot convert dict when coords are missing the key '{e.args[0]}'"
                 ) from e
         try:
             data = d["data"]
@@ -6875,7 +6880,7 @@ class DataArray(
                [[nan, nan, nan],
                 [ 3.,  4.,  5.]]])
         Coordinates:
-          * x_bins   (x_bins) object 16B (5, 15] (15, 25]
+          * x_bins   (x_bins) interval[int64, right] 16B (5, 15] (15, 25]
           * letters  (letters) object 16B 'a' 'b'
         Dimensions without coordinates: y
 
@@ -7577,6 +7582,11 @@ class DataArray(
         -------
         DataArray
         """
-        return (
-            self._to_temp_dataset().drop_attrs(deep=deep).pipe(self._from_temp_dataset)
-        )
+        if not deep:
+            return self._replace(attrs={})
+        else:
+            return (
+                self._to_temp_dataset()
+                .drop_attrs(deep=deep)
+                .pipe(self._from_temp_dataset)
+            )
