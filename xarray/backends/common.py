@@ -26,7 +26,7 @@ from xarray.coding.variables import SerializationWarning
 from xarray.conventions import cf_encoder
 from xarray.core import indexing
 from xarray.core.datatree import DataTree, Variable
-from xarray.core.types import ReadBuffer, T_Chunks
+from xarray.core.types import ReadBuffer, T_Chunks, WriteBuffer
 from xarray.core.utils import (
     FrozenDict,
     NdimSizeLenMixin,
@@ -827,6 +827,16 @@ class BackendEntrypoint:
         to create a `DataTree` object (typically done using :py:meth:`~xarray.DataTree.from_dict`).
         """
 
+        raise NotImplementedError()
+
+    def save_dataset(
+        self,
+        dataset,
+        filename_or_obj: str
+        | os.PathLike[Any]
+        | WriteBuffer
+        | AbstractWritableDataStore,
+    ) -> None:
         raise NotImplementedError()
 
 

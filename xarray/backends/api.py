@@ -28,6 +28,7 @@ from xarray import backends, conventions
 from xarray.backends import plugins
 from xarray.backends.common import (
     AbstractDataStore,
+    AbstractWritableDataStore,
     ArrayWriter,
     _find_absolute_paths,
     _normalize_path,
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
         NestedSequence,
         ReadBuffer,
         T_Chunks,
+        WriteBuffer,
         ZarrStoreLike,
     )
 
@@ -1767,6 +1769,55 @@ WRITEABLE_STORES: dict[T_NetcdfEngine, Callable] = {
     "scipy": backends.ScipyDataStore,
     "h5netcdf": backends.H5NetCDFStore.open,
 }
+
+
+def save_dataset(
+    dataset: Dataset,
+    path_or_file: str | os.PathLike[Any] | WriteBuffer | AbstractWritableDataStore,
+    mode: str = "w",
+    engine: T_Engine = None,
+    encoding: Mapping[Hashable, Mapping[str, Any]] | None = None,
+    open_opts: Union[bool, BackendOptions, None] = None,
+    backend_opts: Union[bool, BackendOptions, None] = None,
+    store_opts: Union[bool, BackendOptions, None] = None,
+    **kwargs,
+) -> tuple[ArrayWriter, AbstractDataStore] | bytes | Delayed | None:
+    if isinstance(path_or_file, os.PathLike):
+        path_or_file = os.fspath(path_or_file)
+
+    if encoding is None:
+        encoding = {}
+
+    if path_or_file is None:
+        if engine is None:
+            engine = "scipy"
+        elif engine != "scipy":
+            raise ValueError(
+                "invalid engine for creating bytes with "
+                f"to_netcdf: {engine!r}. Only the default engine "
+                "or engine='scipy' is supported"
+            )
+        compute = False
+        if not compute:
+            raise NotImplementedError(
+                "to_netcdf() with compute=False is not yet implemented when "
+                "returning bytes"
+            )
+    elif isinstance(path_or_file, str):
+        if engine is None:
+            engine = _get_default_engine(path_or_file)
+        path_or_file = _normalize_path(path_or_file)
+    else:  # file-like object
+        engine = "scipy"
+
+    backend = plugins.get_backend(engine)
+    backend.save_dataset(
+        dataset,
+        path_or_file,
+        open_opts=open_opts,
+        backend_opts=backend_opts,
+        store_opts=store_opts,
+    )
 
 
 # multifile=True returns writer and datastore

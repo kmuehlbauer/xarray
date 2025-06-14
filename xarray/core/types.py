@@ -350,6 +350,13 @@ class ReadBuffer(BaseBuffer, Protocol[AnyStr_co]):
         ...
 
 
+@runtime_checkable
+class WriteBuffer(ReadBuffer):
+    def write(self, b: AnyStr_co = ..., /) -> int:
+        # for BytesIOWrapper, gzip.GzipFile, bz2.BZ2File
+        ...
+
+
 QuantileMethods = Literal[
     "inverted_cdf",
     "averaged_inverted_cdf",
