@@ -5,7 +5,8 @@ import json
 import os
 import struct
 from collections.abc import Hashable, Iterable, Mapping
-from typing import TYPE_CHECKING, Any, Literal, cast
+from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
 import numpy as np
 import pandas as pd
@@ -14,15 +15,19 @@ from xarray import coding, conventions
 from xarray.backends.chunks import grid_rechunk, validate_grid_chunks_alignment
 from xarray.backends.common import (
     BACKEND_ENTRYPOINTS,
+    AbstractDataStore,
     AbstractWritableDataStore,
     BackendArray,
     BackendEntrypoint,
+    BackendOptions,
+    CoderOptions,
     _encode_variable_name,
     _normalize_path,
     datatree_from_dict_with_io_cleanup,
     ensure_dtype_not_object,
 )
 from xarray.backends.store import StoreBackendEntrypoint
+from xarray.coding.times import CFDatetimeCoder
 from xarray.core import indexing
 from xarray.core.treenode import NodePath
 from xarray.core.types import ZarrWriteModes
@@ -1524,6 +1529,37 @@ def open_zarr(
     return ds
 
 
+@dataclass(frozen=True)
+class ZarrStoreOptions(BackendOptions):
+    group: Optional[str] = None
+    # lock: Optional[SerializableLock] = None
+    # autoclose: Optional[bool] = False
+
+
+@dataclass(frozen=True)
+class ZarrOpenOptions(BackendOptions):
+    # cache_attrs: Optional[bool] = None,  # default changed, not used in async api
+    synchronizer: Optional[Any] = (None,)  # not used in async api
+    # path: Optional[str] = None,
+    chunk_store: Optional[Any] = (None,)  # not used in async api
+    # storage_options: Optional[dict[str, Any]] = None,  # not used in async api
+    # zarr_version: Optional[ZarrFormat] = None,  # deprecated
+    # zarr_format: Optional[ZarrFormat] = None,
+    # meta_array: Optional[Any] = None,  # not used in async api
+    # attributes: Optional[dict[str, Any]] = None,
+    # use_consolidated: Optional[bool | str] = None,
+
+
+@dataclass(frozen=True)
+class ZarrCoderOptions(CoderOptions):
+    mask_and_scale: Optional[bool | Mapping[str, bool]] = True
+    decode_times: Optional[
+        bool | CFDatetimeCoder | Mapping[str, bool | CFDatetimeCoder]
+    ] = True
+    concat_characters: Optional[bool | Mapping[str, bool]] = True
+    decode_coords: Optional[Literal["coordinates", "all"] | bool] = True
+
+
 class ZarrBackendEntrypoint(BackendEntrypoint):
     """
     Backend for ".zarr" files based on the zarr package.
@@ -1535,6 +1571,10 @@ class ZarrBackendEntrypoint(BackendEntrypoint):
     --------
     backends.ZarrStore
     """
+
+    coder_class = ZarrCoderOptions
+    open_class = ZarrOpenOptions
+    store_class = ZarrStoreOptions
 
     description = "Open zarr files (.zarr) using zarr in Xarray"
     url = "https://docs.xarray.dev/en/stable/generated/xarray.backends.ZarrBackendEntrypoint.html"
@@ -1553,54 +1593,56 @@ class ZarrBackendEntrypoint(BackendEntrypoint):
         self,
         filename_or_obj: str | os.PathLike[Any] | ReadBuffer | AbstractDataStore,
         *,
-        mask_and_scale=True,
-        decode_times=True,
-        concat_characters=True,
-        decode_coords=True,
-        drop_variables: str | Iterable[str] | None = None,
-        use_cftime=None,
-        decode_timedelta=None,
-        group=None,
+        # group=None,
         mode="r",
-        synchronizer=None,
-        consolidated=None,
-        chunk_store=None,
-        storage_options=None,
-        zarr_version=None,
-        zarr_format=None,
-        store=None,
-        engine=None,
-        use_zarr_fill_value_as_mask=None,
-        cache_members: bool = True,
+        coder_opts: ZarrCoderOptions = None,
+        open_opts: ZarrOpenOptions = None,
+        store_opts: ZarrStoreOptions = None,
+        # synchronizer=None,
+        # consolidated=None,
+        # chunk_store=None,
+        # storage_options=None,
+        # zarr_version=None,
+        # zarr_format=None,
+        # store=None,
+        # engine=None,
+        # use_zarr_fill_value_as_mask=None,
+        # cache_members: bool = True,
+        **kwargs,
     ) -> Dataset:
-        filename_or_obj = _normalize_path(filename_or_obj)
-        if not store:
+        coder_opts = coder_opts if coder_opts is not None else self.coder_opts
+        open_opts = open_opts if open_opts is not None else self.open_opts
+        store_opts = store_opts if store_opts is not None else self.store_opts
+
+        open_kwargs = asdict(open_opts)
+        store_kwargs = asdict(store_opts)
+
+        store = _normalize_path(filename_or_obj)
+        # can't store be passed as filename_or_obj?
+        if not isinstance(store, AbstractDataStore):
             store = ZarrStore.open_group(
                 filename_or_obj,
-                group=group,
+                # group=group,
                 mode=mode,
-                synchronizer=synchronizer,
-                consolidated=consolidated,
-                consolidate_on_close=False,
-                chunk_store=chunk_store,
-                storage_options=storage_options,
-                zarr_version=zarr_version,
-                use_zarr_fill_value_as_mask=None,
-                zarr_format=zarr_format,
-                cache_members=cache_members,
+                **open_kwargs,
+                **store_kwargs,
+                # synchronizer=synchronizer,
+                # consolidated=consolidated,
+                # consolidate_on_close=False,
+                # chunk_store=chunk_store,
+                # storage_options=storage_options,
+                # zarr_version=zarr_version,
+                # use_zarr_fill_value_as_mask=None,
+                # zarr_format=zarr_format,
+                # cache_members=cache_members,
+                **kwargs,
             )
 
         store_entrypoint = StoreBackendEntrypoint()
         with close_on_error(store):
             ds = store_entrypoint.open_dataset(
                 store,
-                mask_and_scale=mask_and_scale,
-                decode_times=decode_times,
-                concat_characters=concat_characters,
-                decode_coords=decode_coords,
-                drop_variables=drop_variables,
-                use_cftime=use_cftime,
-                decode_timedelta=decode_timedelta,
+                coder_opts=coder_opts,
             )
         return ds
 
