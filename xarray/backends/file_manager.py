@@ -206,10 +206,30 @@ class CachingFileManager(FileManager):
 
     def _acquire_with_cache_info(self, needs_lock=True):
         """Acquire a file, returning the file and whether it was cached."""
+        print("QQ0:", list(self._cache.keys()))
+        print("QQ1:", self._key)
         with self._optional_lock(needs_lock):
             try:
                 file = self._cache[self._key]
-            except KeyError:
+            except KeyError as exc:
+                print("QQE:", "cache miss")
+                # 🚨 Check if any other file with same path (in args[0]) is open
+                file_path = self._args[0]
+                for other_key in self._cache.keys():
+                    # Unpack the key tuple to extract the path and manager ID
+                    if isinstance(other_key, _HashedSequence) and len(other_key) >= 5:
+                        other_path = other_key[1][0]  # other._args[0]
+                        other_manager_id = other_key[4]
+
+                        if (
+                            other_path == file_path
+                            and other_manager_id != self._manager_id
+                            and self._mode == "w"
+                        ):
+                            raise RuntimeError(
+                                f"Write conflict: File '{file_path}' is already open by a different manager."
+                            ) from exc
+
                 kwargs = self._kwargs
                 if self._mode is not _DEFAULT_MODE:
                     kwargs = kwargs.copy()

@@ -3946,7 +3946,7 @@ class TestScipyInMemoryData(CFEncodedBase, NetCDF3Only):
     @contextlib.contextmanager
     def create_store(self):
         fobj = BytesIO()
-        yield backends.ScipyDataStore(fobj, "w")
+        yield backends.ScipyDataStore.open(fobj, "w")
 
     def test_to_netcdf_explicit_engine(self) -> None:
         # regression test for GH1321
@@ -3957,6 +3957,9 @@ class TestScipyInMemoryData(CFEncodedBase, NetCDF3Only):
         fobj = data.to_netcdf()
         with self.open(fobj) as ds:
             unpickled = pickle.loads(pickle.dumps(ds))
+            print("XX0:", data)
+            print("XX1:", ds)
+            print("XX2:", unpickled)
             assert_identical(unpickled, data)
 
 
@@ -3967,7 +3970,7 @@ class TestScipyFileObject(CFEncodedBase, NetCDF3Only):
     @contextlib.contextmanager
     def create_store(self):
         fobj = BytesIO()
-        yield backends.ScipyDataStore(fobj, "w")
+        yield backends.ScipyDataStore.open(fobj, "w")
 
     @contextlib.contextmanager
     def roundtrip(
@@ -4000,7 +4003,7 @@ class TestScipyFilePath(CFEncodedBase, NetCDF3Only):
     @contextlib.contextmanager
     def create_store(self):
         with create_tmp_file() as tmp_file:
-            with backends.ScipyDataStore(tmp_file, mode="w") as store:
+            with backends.ScipyDataStore.open(tmp_file, mode="w") as store:
                 yield store
 
     def test_array_attrs(self) -> None:

@@ -85,7 +85,7 @@ DATAARRAY_VARIABLE = "__xarray_dataarray_variable__"
 
 ENGINES = {
     "netcdf4": backends.NetCDF4DataStore.open,
-    "scipy": backends.ScipyDataStore,
+    "scipy": backends.ScipyDataStore.open,
     "pydap": backends.PydapDataStore.open,
     "h5netcdf": backends.H5NetCDFStore.open,
     "zarr": backends.ZarrStore.open_group,
@@ -1690,7 +1690,7 @@ def open_mfdataset(
 
 WRITEABLE_STORES: dict[T_NetcdfEngine, Callable] = {
     "netcdf4": backends.NetCDF4DataStore.open,
-    "scipy": backends.ScipyDataStore,
+    "scipy": backends.ScipyDataStore.open,
     "h5netcdf": backends.H5NetCDFStore.open,
 }
 

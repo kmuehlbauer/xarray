@@ -28,6 +28,7 @@ from xarray.core.utils import (
     Frozen,
     FrozenDict,
     close_on_error,
+    is_remote_uri,
     module_available,
     try_read_magic_number_from_file_or_path,
 )
@@ -100,44 +101,44 @@ class ScipyArrayWrapper(BackendArray):
                     raise
 
 
-def _open_scipy_netcdf(filename, mode, mmap, version):
-    import scipy.io
-
-    # if the string ends with .gz, then gunzip and open as netcdf file
-    if isinstance(filename, str) and filename.endswith(".gz"):
-        try:
-            return scipy.io.netcdf_file(
-                gzip.open(filename), mode=mode, mmap=mmap, version=version
-            )
-        except TypeError as e:
-            # TODO: gzipped loading only works with NetCDF3 files.
-            errmsg = e.args[0]
-            if "is not a valid NetCDF 3 file" in errmsg:
-                raise ValueError(
-                    "gzipped file loading only supports NetCDF 3 files."
-                ) from e
-            else:
-                raise
-
-    if isinstance(filename, bytes) and filename.startswith(b"CDF"):
-        # it's a NetCDF3 bytestring
-        filename = io.BytesIO(filename)
-
-    try:
-        return scipy.io.netcdf_file(filename, mode=mode, mmap=mmap, version=version)
-    except TypeError as e:  # netcdf3 message is obscure in this case
-        errmsg = e.args[0]
-        if "is not a valid NetCDF 3 file" in errmsg:
-            msg = """
-            If this is a NetCDF4 file, you may need to install the
-            netcdf4 library, e.g.,
-
-            $ pip install netcdf4
-            """
-            errmsg += msg
-            raise TypeError(errmsg) from e
-        else:
-            raise
+# def _open_scipy_netcdf(filename, mode, mmap, version):
+#     import scipy.io
+#
+#     # if the string ends with .gz, then gunzip and open as netcdf file
+#     if isinstance(filename, str) and filename.endswith(".gz"):
+#         try:
+#             return scipy.io.netcdf_file(
+#                 gzip.open(filename), mode=mode, mmap=mmap, version=version
+#             )
+#         except TypeError as e:
+#             # TODO: gzipped loading only works with NetCDF3 files.
+#             errmsg = e.args[0]
+#             if "is not a valid NetCDF 3 file" in errmsg:
+#                 raise ValueError(
+#                     "gzipped file loading only supports NetCDF 3 files."
+#                 ) from e
+#             else:
+#                 raise
+#
+#     if isinstance(filename, bytes) and filename.startswith(b"CDF"):
+#         # it's a NetCDF3 bytestring
+#         filename = io.BytesIO(filename)
+#
+#     try:
+#         return scipy.io.netcdf_file(filename, mode=mode, mmap=mmap, version=version)
+#     except TypeError as e:  # netcdf3 message is obscure in this case
+#         errmsg = e.args[0]
+#         if "is not a valid NetCDF 3 file" in errmsg:
+#             msg = """
+#             If this is a NetCDF4 file, you may need to install the
+#             netcdf4 library, e.g.,
+#
+#             $ pip install netcdf4
+#             """
+#             errmsg += msg
+#             raise TypeError(errmsg) from e
+#         else:
+#             raise
 
 
 class ScipyDataStore(WritableCFDataStore):
@@ -149,11 +150,71 @@ class ScipyDataStore(WritableCFDataStore):
     It only supports the NetCDF3 file-format.
     """
 
+    __slots__ = (
+        "_filename",
+        "_group",
+        "_manager",
+        "_mode",
+        "autoclose",
+        "format",
+        "is_remote",
+        "lock",
+    )
+
     def __init__(
-        self, filename_or_obj, mode="r", format=None, group=None, mmap=None, lock=None
+        self,
+        manager,
+        mode="r",
+        group=None,
+        lock=None,
+        autoclose=False,
     ):
+        import scipy.io
+
         if group is not None:
             raise ValueError("cannot save to a group with the scipy.io.netcdf backend")
+
+        if isinstance(manager, scipy.io.netcdf_file):
+            root = manager
+            manager = DummyFileManager(root)
+
+        self._manager = manager
+        self._group = group
+        self._mode = mode
+        try:
+            self.format = (
+                "NETCDF3_CLASSIC" if self.ds.version_byte == 1 else "NETCDF3_64BIT"
+            )
+        except TypeError as e:  # netcdf3 message is obscure in this case
+            errmsg = e.args[0]
+            if "is not a valid NetCDF 3 file" in errmsg:
+                msg = """
+                If this is a NetCDF4 file, you may need to install the
+                netcdf4 library, e.g.,
+
+                $ pip install netcdf4
+                """
+                errmsg += msg
+                raise TypeError(errmsg) from e
+            else:
+                raise
+        self._filename = self.ds.filename
+        self.is_remote = is_remote_uri(self._filename)
+        self.lock = ensure_lock(lock)
+        self.autoclose = autoclose
+
+    @classmethod
+    def open(
+        cls,
+        filename_or_obj,
+        mode="r",
+        format=None,
+        mmap=False,
+        group=None,
+        lock=None,
+        autoclose=False,
+    ):
+        import scipy.io
 
         if format is None or format == "NETCDF3_64BIT":
             version = 2
@@ -162,35 +223,48 @@ class ScipyDataStore(WritableCFDataStore):
         else:
             raise ValueError(f"invalid format for scipy.io.netcdf backend: {format!r}")
 
+        # if the string ends with .gz, then gunzip and open as netcdf file
+        if isinstance(filename_or_obj, str) and filename_or_obj.endswith(".gz"):
+            try:
+                filename_or_obj = gzip.open(filename_or_obj)
+            except TypeError as e:
+                # TODO: gzipped loading only works with NetCDF3 files.
+                errmsg = e.args[0]
+                if "is not a valid NetCDF 3 file" in errmsg:
+                    raise ValueError(
+                        "gzipped file loading only supports NetCDF 3 files."
+                    ) from e
+                else:
+                    raise
+
+        if isinstance(filename_or_obj, bytes) and filename_or_obj.startswith(b"CDF"):
+            # it's a NetCDF3 bytestring
+            filename_or_obj = io.BytesIO(filename_or_obj)
+
         if lock is None and mode != "r" and isinstance(filename_or_obj, str):
             lock = get_write_lock(filename_or_obj)
 
-        self.lock = ensure_lock(lock)
+        kwargs = dict(mmap=mmap, version=version)
+        manager = CachingFileManager(
+            scipy.io.netcdf_file, filename_or_obj, mode=mode, kwargs=kwargs
+        )
+        return cls(manager, group=group, mode=mode, lock=lock, autoclose=autoclose)
 
-        if isinstance(filename_or_obj, str):
-            manager = CachingFileManager(
-                _open_scipy_netcdf,
-                filename_or_obj,
-                mode=mode,
-                lock=lock,
-                kwargs=dict(mmap=mmap, version=version),
-            )
-        else:
-            scipy_dataset = _open_scipy_netcdf(
-                filename_or_obj, mode=mode, mmap=mmap, version=version
-            )
-            manager = DummyFileManager(scipy_dataset)
-
-        self._manager = manager
+    def _acquire(self, needs_lock=True):
+        with self._manager.acquire_context(needs_lock) as root:
+            # there should be a better solution than this crude hack
+            if isinstance(self._manager._args[0], io.BytesIO):
+                self._manager._args[0].seek(0)
+        return root
 
     @property
     def ds(self):
-        return self._manager.acquire()
+        return self._acquire()
 
     def open_store_variable(self, name, var):
         return Variable(
             var.dimensions,
-            ScipyArrayWrapper(name, self),
+            indexing.LazilyIndexedArray(ScipyArrayWrapper(name, self)),
             _decode_attrs(var._attributes),
         )
 
@@ -324,7 +398,7 @@ class ScipyBackendEntrypoint(BackendEntrypoint):
         lock=None,
     ) -> Dataset:
         filename_or_obj = _normalize_path(filename_or_obj)
-        store = ScipyDataStore(
+        store = ScipyDataStore.open(
             filename_or_obj, mode=mode, format=format, group=group, mmap=mmap, lock=lock
         )
 
